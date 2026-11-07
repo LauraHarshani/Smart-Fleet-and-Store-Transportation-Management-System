@@ -82,9 +82,9 @@ const AdminLayout = () => {
                 </nav>
 
                 {/* Bottom Profile Area */}
-                <div className="p-4 border-t border-white/10 mt-auto">
+                <div className="py-4 border-t border-white/10 mt-auto">
                     <NavItem to="/profile" icon={User} label="Profile" active={isActive('/profile')} />
-                    <button className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-colors">
+                    <button className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-red-500/15 hover:text-red-300 transition-colors">
                         <LogOut size={20} />
                         <span className="text-sm">Sign Out</span>
                     </button>
