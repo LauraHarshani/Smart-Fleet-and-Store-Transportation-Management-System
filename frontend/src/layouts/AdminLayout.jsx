@@ -5,31 +5,47 @@ import {
     LineChart, User, LogOut, Bell 
 } from 'lucide-react';
 
+const pageTitles = {
+    '/dashboard': 'Dashboard',
+    '/bookings': 'Bookings',
+    '/trip-planning': 'Trip Planning',
+    '/schedules': 'Vehicle Schedule',
+    '/live-tracking': 'Live Tracking',
+    '/vehicles': 'Vehicles',
+    '/drivers': 'Drivers',
+    '/stores': 'Stores',
+    '/items': 'Items',
+    '/users': 'User Management',
+    '/reports': 'Reports',
+    '/profile': 'Profile',
+};
+
+const NavItem = ({ to, icon: Icon, label, active }) => (
+    <Link 
+        to={to} 
+        className={`flex items-center gap-3 px-4 py-2.5 mx-3 rounded-lg font-medium transition-colors ${
+            active
+                ? 'bg-[#0fa979] text-white' 
+                : 'text-gray-300 hover:bg-white/10 hover:text-white'
+        }`}
+    >
+        <Icon size={20} />
+        <span className="text-sm">{label}</span>
+    </Link>
+);
+
+const NavCategory = ({ title }) => (
+    <div className="px-7 mt-6 mb-2 text-[11px] font-bold text-gray-400 tracking-wider uppercase">
+        {title}
+    </div>
+);
+
 const AdminLayout = () => {
     const location = useLocation();
+    const pageTitle = pageTitles[location.pathname] ?? '';
 
     // Helper function to check if the current path matches the link (for active state)
     const isActive = (path) => location.pathname === path;
-
-    const NavItem = ({ to, icon: Icon, label }) => (
-        <Link 
-            to={to} 
-            className={`flex items-center gap-3 px-4 py-2.5 mx-3 rounded-lg font-medium transition-colors ${
-                isActive(to) 
-                    ? 'bg-[#0fa979] text-white' 
-                    : 'text-gray-300 hover:bg-white/10 hover:text-white'
-            }`}
-        >
-            <Icon size={20} />
-            <span className="text-sm">{label}</span>
-        </Link>
-    );
-
-    const NavCategory = ({ title }) => (
-        <div className="px-7 mt-6 mb-2 text-[11px] font-bold text-gray-400 tracking-wider uppercase">
-            {title}
-        </div>
-    );
 
     return (
         <div className="flex h-screen bg-[#f4f7f6]">
@@ -46,28 +62,28 @@ const AdminLayout = () => {
                 {/* Navigation Links - Hidden scrollbar class added here */}
                 <nav className="flex-1 overflow-y-auto pb-4 scrollbar-hide">
                     <NavCategory title="Overview" />
-                    <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" />
+                    <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" active={isActive('/dashboard')} />
 
                     <NavCategory title="Transport & Operations" />
-                    <NavItem to="/bookings" icon={CalendarCheck} label="Bookings" />
-                    <NavItem to="/trip-planning" icon={RouteIcon} label="Trip Planning" />
-                    <NavItem to="/schedules" icon={CalendarDays} label="Schedules" />
-                    <NavItem to="/live-tracking" icon={MapPin} label="Live Tracking" />
+                    <NavItem to="/bookings" icon={CalendarCheck} label="Bookings" active={isActive('/bookings')} />
+                    <NavItem to="/trip-planning" icon={RouteIcon} label="Trip Planning" active={isActive('/trip-planning')} />
+                    <NavItem to="/schedules" icon={CalendarDays} label="Schedules" active={isActive('/schedules')} />
+                    <NavItem to="/live-tracking" icon={MapPin} label="Live Tracking" active={isActive('/live-tracking')} />
 
                     <NavCategory title="Management" />
-                    <NavItem to="/vehicles" icon={Truck} label="Vehicles" />
-                    <NavItem to="/drivers" icon={Users} label="Drivers" />
-                    <NavItem to="/stores" icon={Store} label="Stores" />
-                    <NavItem to="/items" icon={Package} label="Items" />
-                    <NavItem to="/users" icon={UserCog} label="Users" />
+                    <NavItem to="/vehicles" icon={Truck} label="Vehicles" active={isActive('/vehicles')} />
+                    <NavItem to="/drivers" icon={Users} label="Drivers" active={isActive('/drivers')} />
+                    <NavItem to="/stores" icon={Store} label="Stores" active={isActive('/stores')} />
+                    <NavItem to="/items" icon={Package} label="Items" active={isActive('/items')} />
+                    <NavItem to="/users" icon={UserCog} label="Users" active={isActive('/users')} />
 
                     <NavCategory title="Analytics" />
-                    <NavItem to="/reports" icon={LineChart} label="Reports" />
+                    <NavItem to="/reports" icon={LineChart} label="Reports" active={isActive('/reports')} />
                 </nav>
 
                 {/* Bottom Profile Area */}
                 <div className="p-4 border-t border-white/10 mt-auto">
-                    <NavItem to="/profile" icon={User} label="Profile" />
+                    <NavItem to="/profile" icon={User} label="Profile" active={isActive('/profile')} />
                     <button className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-colors">
                         <LogOut size={20} />
                         <span className="text-sm">Sign Out</span>
@@ -79,7 +95,7 @@ const AdminLayout = () => {
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Top Header */}
                 <header className="h-16 bg-white flex items-center justify-between px-8 border-b border-gray-200">
-                    <h1 className="text-xl font-bold text-gray-800">Dashboard</h1>
+                    <h1 className="text-xl font-bold text-gray-800">{pageTitle}</h1>
                     
                     <div className="flex items-center gap-6">
                         <button className="text-gray-500 hover:text-gray-700 relative">
