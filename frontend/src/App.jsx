@@ -5,24 +5,29 @@ import Dashboard from './pages/admin/Dashboard';
 import Login from './pages/Login';
 import Bookings from './pages/admin/Bookings';
 import Users from './pages/admin/Users'; 
+import Stores from './pages/admin/Stores';
+import Vehicles from './pages/admin/Vehicles';
+import Items from './pages/admin/Items';
+import Profile from './pages/admin/Profile'; // Import the Profile page
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Route */}
         <Route path="/login" element={<Login />} />
 
-        {/* Protected Routes with AuthGuard and AdminLayout */}
         <Route element={<AuthGuard allowedRoles={['System Administrator']} />}>
           <Route element={<AdminLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/bookings" element={<Bookings />} />
             <Route path="/users" element={<Users />} /> 
+            <Route path="/stores" element={<Stores />} />
+            <Route path="/vehicles" element={<Vehicles />} /> 
+            <Route path="/items" element={<Items />} /> 
+            <Route path="/profile" element={<Profile />} /> {/* Added Profile Route */}
           </Route>
         </Route>
 
-        {/* Default Catch-all redirect to login or dashboard */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
