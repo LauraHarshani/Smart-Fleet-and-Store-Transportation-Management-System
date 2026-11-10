@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Truck, Mail, Lock, CheckCircle2, X } from 'lucide-react';
+import loginImage from '../assets/login.jpeg'; 
 
 export default function Login() {
-  // State variables for form inputs and modals
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -13,7 +13,6 @@ export default function Login() {
   
   const navigate = useNavigate();
 
-  // Handle user login and session storage initialization
   const handleLogin = (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -21,17 +20,14 @@ export default function Login() {
       return;
     }
     
-    // Save authentication state, mock token, and role for AuthGuard compatibility
     localStorage.setItem('isAuthenticated', 'true');
     localStorage.setItem('token', 'mock-jwt-token-12345');
     localStorage.setItem('role', 'System Administrator');
     localStorage.setItem('userEmail', email);
     
-    // Redirect directly to the dashboard page upon successful login
     navigate('/dashboard');
   };
 
-  // Handle password reset submission
   const handleForgotPasswordSubmit = (e) => {
     e.preventDefault();
     if (!forgotEmail) {
@@ -44,65 +40,67 @@ export default function Login() {
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 font-sans bg-[#f8faf9]">
       {/* Left Banner Section with branding and features */}
-      <div className="relative hidden lg:flex flex-col justify-between p-12 bg-[#0b2149] text-white overflow-hidden">
-        <div className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=1200&auto=format&fit=crop')` }}></div>
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b2149] via-[#0b2149]/60 to-transparent"></div>
+      <div className="relative hidden lg:flex flex-col justify-between p-12 bg-black text-white overflow-hidden">
+        {/* Adjusted Background Image - Removed heavy green tints and blend modes, using simple opacity */}
+        <div className="absolute inset-0 bg-cover bg-center opacity-50 transition-opacity" style={{ backgroundImage: `url(${loginImage})` }}></div>
+        {/* Subtle dark gradient for text readability without making everything green */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#091510] via-[#091510]/60 to-transparent"></div>
 
         {/* Top LogiFleet Logo Header */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="bg-[#0fa979] p-2 rounded-xl text-white">
+          <div className="bg-[#0fa979] p-2 rounded-xl text-white shadow-sm">
             <Truck size={24} strokeWidth={2.5} />
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight">LogiFleet</h2>
+            <h2 className="text-xl font-bold tracking-tight text-white">LogiFleet</h2>
             <p className="text-[11px] text-gray-300 uppercase tracking-widest font-medium">Fleet & Store Management</p>
           </div>
         </div>
 
         {/* Middle Promotional Content */}
         <div className="relative z-10 max-w-lg my-auto py-12">
-          <h1 className="text-4xl font-extrabold tracking-tight leading-tight mb-6">
+          <h1 className="text-4xl font-extrabold tracking-tight leading-tight mb-6 text-white drop-shadow-sm">
             Move goods between stores, without the wait
           </h1>
-          <p className="text-gray-300 text-sm leading-relaxed mb-10">
+          <p className="text-gray-200 text-sm leading-relaxed mb-10 drop-shadow-sm">
             Book transport, track your vehicle and confirm handover in one place.
           </p>
 
           <div className="space-y-6">
             <div className="flex items-start gap-4">
-              <div className="bg-[#0fa979]/20 p-1.5 rounded-full text-[#0fa979] mt-0.5">
+              <div className="bg-[#0fa979] p-1.5 rounded-full text-white mt-0.5 shadow-sm">
                 <CheckCircle2 size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">Book & Schedule Trips</h4>
-                <p className="text-xs text-gray-400">Request and track your deliveries seamlessly.</p>
+                <h4 className="text-sm font-bold text-white drop-shadow-sm">Book & Schedule Trips</h4>
+                <p className="text-xs text-gray-300 drop-shadow-sm">Request and track your deliveries seamlessly.</p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <div className="bg-[#0fa979]/20 p-1.5 rounded-full text-[#0fa979] mt-0.5">
+              <div className="bg-[#0fa979] p-1.5 rounded-full text-white mt-0.5 shadow-sm">
                 <CheckCircle2 size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">Track in Real Time</h4>
-                <p className="text-xs text-gray-400">Monitor vehicle location and trip progress.</p>
+                <h4 className="text-sm font-bold text-white drop-shadow-sm">Track in Real Time</h4>
+                <p className="text-xs text-gray-300 drop-shadow-sm">Monitor vehicle location and trip progress.</p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <div className="bg-[#0fa979]/20 p-1.5 rounded-full text-[#0fa979] mt-0.5">
+              <div className="bg-[#0fa979] p-1.5 rounded-full text-white mt-0.5 shadow-sm">
                 <CheckCircle2 size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">Manage Deliveries</h4>
-                <p className="text-xs text-gray-400">Get updates on items and arrivals instantly.</p>
+                <h4 className="text-sm font-bold text-white drop-shadow-sm">Manage Deliveries</h4>
+                <p className="text-xs text-gray-300 drop-shadow-sm">Get updates on items and arrivals instantly.</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer info */}
-        <div className="relative z-10 text-xs text-gray-400 font-medium">
+        <div className="relative z-10 text-xs text-gray-400 font-medium drop-shadow-sm">
           © 2026 LogiFleet Ops • Enterprise Logistics Core
         </div>
       </div>
@@ -116,7 +114,6 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
-            {/* Email input field */}
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Email</label>
               <div className="relative">
@@ -134,7 +131,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Password input field */}
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Password</label>
               <div className="relative">
@@ -152,7 +148,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Remember me and Forgot Password options */}
             <div className="flex items-center justify-between text-xs font-medium pt-1">
               <label className="flex items-center gap-2 cursor-pointer text-gray-600">
                 <input 
@@ -172,7 +167,6 @@ export default function Login() {
               </button>
             </div>
 
-            {/* Submit Sign In button */}
             <button 
               type="submit" 
               className="w-full py-3.5 bg-[#0fa979] text-white rounded-xl font-bold text-sm hover:bg-[#0d9468] transition-colors shadow-[0_4px_12px_rgba(15,169,121,0.25)] mt-2 cursor-pointer"

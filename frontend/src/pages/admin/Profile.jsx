@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { User, Mail, Shield, Store, Lock, CheckCircle2, RotateCcw, Key } from 'lucide-react';
+import { User, Mail, Shield, Lock, CheckCircle2, Key } from 'lucide-react';
 
 export default function Profile() {
   const [name, setName] = useState('Laura Harshani');
   const [email, setEmail] = useState('harshi@gmail.com');
   const [phone, setPhone] = useState('+94 77 123 4567');
-  const [store, setStore] = useState('Colombo Main Store');
   const [role, setRole] = useState('System Administrator');
   
   // Password change states
@@ -59,7 +58,7 @@ export default function Profile() {
         
         {/* Left Column - Profile Card */}
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center relative overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center relative overflow-hidden pb-10">
             <div className="absolute top-0 left-0 right-0 h-20 bg-[#113b2e]"></div>
             
             <div className="relative mt-6 mb-4">
@@ -75,31 +74,6 @@ export default function Profile() {
             <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1 bg-[#d1f4e0] text-[#0d9468] text-[10px] font-bold rounded-full uppercase tracking-wider">
               <Shield size={12}/> {role}
             </div>
-
-            <div className="mt-6 pt-6 border-t border-gray-100 text-left space-y-3 text-xs">
-              <div className="flex justify-between text-gray-500">
-                <span>Assigned Hub:</span>
-                <span className="font-bold text-gray-800">{store}</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>System Realm:</span>
-                <span className="font-bold text-gray-800">SSO-LK-CENTRAL</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>Security Clearance:</span>
-                <span className="font-bold text-[#0fa979]">Level 5 (Root)</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-[#113b2e] rounded-2xl p-6 text-white shadow-sm">
-             <div className="text-[9px] text-[#0fa979] font-bold uppercase tracking-widest mb-1.5">LOGIFLEET SECURITY</div>
-             <div className="text-xs font-bold mb-2">Two-Factor Authentication (2FA)</div>
-             <p className="text-[11px] text-gray-300 leading-relaxed mb-4">Your account is secured via corporate FIDO2 hardware token verification.</p>
-             <div className="bg-white/10 px-3 py-2 rounded-lg text-[10px] font-bold flex items-center justify-between">
-                <span>Authenticator Status</span>
-                <span className="text-[#0fa979] flex items-center gap-1"><CheckCircle2 size={12}/> Active</span>
-             </div>
           </div>
         </div>
 
@@ -153,22 +127,6 @@ export default function Profile() {
                       onChange={(e) => setPhone(e.target.value)} 
                       className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-[#0fa979]" 
                     />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Assigned Operating Hub</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><Store size={14}/></div>
-                    <select 
-                      value={store} 
-                      onChange={(e) => setStore(e.target.value)} 
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none appearance-none"
-                    >
-                      <option value="Colombo Main Store">Colombo Main Store</option>
-                      <option value="Kandy Branch">Kandy Branch</option>
-                      <option value="Galle Warehouse">Galle Warehouse</option>
-                    </select>
                   </div>
                 </div>
               </div>
