@@ -8,6 +8,7 @@ import {
 const pageTitles = {
     '/dashboard': 'Dashboard',
     '/bookings': 'Bookings',
+    '/approval-log': 'Bookings',
     '/trip-planning': 'Trip Planning',
     '/schedules': 'Vehicle Schedule',
     '/live-tracking': 'Live Tracking',
@@ -45,7 +46,9 @@ const AdminLayout = () => {
     const pageTitle = pageTitles[location.pathname] ?? '';
 
     // Helper function to check if the current path matches the link (for active state)
-    const isActive = (path) => location.pathname === path;
+    const isActive = (path) =>
+        location.pathname === path ||
+        (path === '/bookings' && location.pathname === '/approval-log');
 
     return (
         <div className="flex h-screen bg-[#f4f7f6]">

@@ -9,6 +9,9 @@ import Stores from './pages/admin/Stores';
 import Vehicles from './pages/admin/Vehicles';
 import Items from './pages/admin/Items';
 import Profile from './pages/admin/Profile';
+import Schedules from './pages/admin/Schedules';
+import LiveTracking from './pages/admin/LiveTracking';
+import BookingApprovalLog from './pages/admin/BookingApprovalLog';
 
 function App() {
   return (
@@ -25,6 +28,11 @@ function App() {
             <Route path="/vehicles" element={<Vehicles />} /> 
             <Route path="/items" element={<Items />} /> 
             <Route path="/profile" element={<Profile />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path='bookings' element={<Bookings/>} />
+            <Route path='schedules' element={<Schedules/>} />
+            <Route path='live-tracking' element={<LiveTracking />} />
+            <Route path='approval-log' element={<BookingApprovalLog/>} />
           </Route>
         </Route>
 
