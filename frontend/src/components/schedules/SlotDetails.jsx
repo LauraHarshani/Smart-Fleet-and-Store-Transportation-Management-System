@@ -3,6 +3,7 @@ import {
   Truck,
   UserRound,
   Package,
+  CalendarDays,
   CalendarClock,
   Clock3,
   Route,
@@ -15,7 +16,7 @@ const slotStatusStyles = {
   Cancelled: "bg-red-100 text-red-800",
 };
 
-const SlotDetails = ({ slot, onClose }) => {
+const SlotDetails = ({ slot, selectedDate, onClose }) => {
   if (!slot) return null;
 
   return (
@@ -52,6 +53,12 @@ const SlotDetails = ({ slot, onClose }) => {
           icon={Store}
           label="Store"
           value={slot.store}
+        />
+
+        <InfoItem
+          icon={CalendarDays}
+          label="Reservation Date"
+          value={selectedDate}
         />
 
         <InfoItem
