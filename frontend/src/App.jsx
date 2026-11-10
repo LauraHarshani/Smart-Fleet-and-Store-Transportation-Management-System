@@ -8,7 +8,7 @@ import Users from './pages/admin/Users';
 import Stores from './pages/admin/Stores';
 import Vehicles from './pages/admin/Vehicles';
 import Items from './pages/admin/Items';
-import Profile from './pages/admin/Profile'; // Import the Profile page
+import Profile from './pages/admin/Profile';
 
 function App() {
   return (
@@ -24,7 +24,7 @@ function App() {
             <Route path="/stores" element={<Stores />} />
             <Route path="/vehicles" element={<Vehicles />} /> 
             <Route path="/items" element={<Items />} /> 
-            <Route path="/profile" element={<Profile />} /> {/* Added Profile Route */}
+            <Route path="/profile" element={<Profile />} />
           </Route>
         </Route>
 
