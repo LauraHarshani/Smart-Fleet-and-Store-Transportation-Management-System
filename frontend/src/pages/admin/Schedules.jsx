@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
 
 import ScheduleTabs from "../../components/schedules/ScheduleTabs";
@@ -303,14 +303,17 @@ const Schedules = () => {
   const [trips, setTrips] = useState(initialTrips);
   const [slots] = useState(initialSlots);
 
-  const [selectedTripId, setSelectedTripId] = useState("TR-160");
-  const [selectedSlotId, setSelectedSlotId] = useState("TR-160");
+  // No details are selected when the page first loads.
+  const [selectedTripId, setSelectedTripId] = useState(null);
+  const [selectedSlotId, setSelectedSlotId] = useState(null);
 
   const [vehicleFilter, setVehicleFilter] = useState("All Vehicles");
   const [tripStatusFilter, setTripStatusFilter] = useState("All Status");
 
   const [storeFilter, setStoreFilter] = useState("All Stores");
   const [slotTypeFilter, setSlotTypeFilter] = useState("All Slot Types");
+
+  const detailsRef = useRef(null);
 
   const selectedTrip =
     trips.find((trip) => trip.id === selectedTripId) || null;
@@ -352,8 +355,37 @@ const Schedules = () => {
     );
   };
 
+  // Scroll to the details section after it has appeared in the page.
+  useEffect(() => {
+    if (!selectedTripId && !selectedSlotId) return;
+
+    const animationFrame = requestAnimationFrame(() => {
+      detailsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [selectedTripId, selectedSlotId, activeTab]);
+
+  // Select a trip and show its details.
+  const handleTripSelect = (tripId) => {
+    setSelectedSlotId(null);
+    setSelectedTripId(tripId);
+  };
+
+  // Select a store slot and show its details.
+  const handleSlotSelect = (slotId) => {
+    setSelectedTripId(null);
+    setSelectedSlotId(slotId);
+  };
+
+  // Clear selections when switching schedule tabs.
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    setSelectedTripId(null);
+    setSelectedSlotId(null);
   };
 
   return (
@@ -364,6 +396,7 @@ const Schedules = () => {
           <h1 className="text-2xl font-bold text-gray-900">
             Slot Scheduling & Fleet Timeline
           </h1>
+
           <p className="mt-1 text-sm text-gray-600">
             View and manage vehicle schedules and store time slots
           </p>
@@ -373,6 +406,7 @@ const Schedules = () => {
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex h-10 items-center gap-2 rounded-xl border border-[#27866A] bg-white px-3 text-sm text-gray-600">
             <CalendarDays size={18} className="text-[#27866A]" />
+
             <input
               type="date"
               value={selectedDate}
@@ -397,7 +431,7 @@ const Schedules = () => {
           <VehicleTimeline
             trips={filteredTrips}
             selectedTripId={selectedTripId}
-            onSelectTrip={setSelectedTripId}
+            onSelectTrip={handleTripSelect}
             vehicleFilter={vehicleFilter}
             setVehicleFilter={setVehicleFilter}
             tripStatusFilter={tripStatusFilter}
@@ -405,13 +439,18 @@ const Schedules = () => {
           />
 
           {selectedTrip && (
-            <TripDetails
-              trip={selectedTrip}
-              selectedDate={selectedDate}
-              onClose={() => setSelectedTripId(null)}
-              onUpdateStatus={updateTripStatus}
-              statusOptions={statusOptions}
-            />
+            <div
+              ref={detailsRef}
+              className="mt-6 scroll-mt-6"
+            >
+              <TripDetails
+                trip={selectedTrip}
+                selectedDate={selectedDate}
+                onClose={() => setSelectedTripId(null)}
+                onUpdateStatus={updateTripStatus}
+                statusOptions={statusOptions}
+              />
+            </div>
           )}
         </>
       )}
@@ -422,7 +461,7 @@ const Schedules = () => {
           <StoreTimeline
             slots={filteredSlots}
             selectedSlotId={selectedSlotId}
-            onSelectSlot={setSelectedSlotId}
+            onSelectSlot={handleSlotSelect}
             storeFilter={storeFilter}
             setStoreFilter={setStoreFilter}
             slotTypeFilter={slotTypeFilter}
@@ -430,11 +469,16 @@ const Schedules = () => {
           />
 
           {selectedSlot && (
-            <SlotDetails
-              slot={selectedSlot}
-              selectedDate={selectedDate}
-              onClose={() => setSelectedSlotId(null)}
-            />
+            <div
+              ref={detailsRef}
+              className="mt-6 scroll-mt-6"
+            >
+              <SlotDetails
+                slot={selectedSlot}
+                selectedDate={selectedDate}
+                onClose={() => setSelectedSlotId(null)}
+              />
+            </div>
           )}
         </>
       )}
