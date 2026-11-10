@@ -55,7 +55,7 @@ const AdminLayout = () => {
             {/* Sidebar */}
             <aside className="w-[260px] bg-[#113b2e] text-white flex flex-col overflow-hidden">
                 {/* Logo Area */}
-                <div className="p-6">
+                <div className="p-6 border-b border-white/10">
                     <div className="flex items-center gap-2 font-bold text-2xl tracking-wide">
                         LogiFleet <Truck size={24} className="mt-1" />
                     </div>
