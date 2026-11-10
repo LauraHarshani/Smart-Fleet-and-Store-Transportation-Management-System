@@ -20,6 +20,7 @@ import {
   Weight,
 } from "lucide-react";
 
+import { useNavigate } from "react-router-dom";
 // Sample booking data
 const initialBookings = [
   {
@@ -473,6 +474,8 @@ const Bookings = () => {
   const [activeTab, setActiveTab] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
 
+  const navigate = useNavigate();
+
   const filteredBookings = useMemo(() => {
     return bookings.filter((booking) => {
       const matchesTab =
@@ -543,6 +546,7 @@ const Bookings = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => navigate("/approval-log")}
             className="flex items-center gap-2 rounded-lg border border-gray-100 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
           >
             <History size={15} />
