@@ -407,6 +407,7 @@ const Schedules = () => {
           {selectedTrip && (
             <TripDetails
               trip={selectedTrip}
+              selectedDate={selectedDate}
               onClose={() => setSelectedTripId(null)}
               onUpdateStatus={updateTripStatus}
               statusOptions={statusOptions}
@@ -431,6 +432,7 @@ const Schedules = () => {
           {selectedSlot && (
             <SlotDetails
               slot={selectedSlot}
+              selectedDate={selectedDate}
               onClose={() => setSelectedSlotId(null)}
             />
           )}
