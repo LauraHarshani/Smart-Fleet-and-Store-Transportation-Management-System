@@ -93,7 +93,7 @@ function TrackingMap({ selected, onSelect, showAllRoutes }) {
   const visibleRoutes = showAllRoutes ? vehicles : [selected];
 
   return (
-    <div className="relative h-[550px] min-h-[450px] w-full overflow-hidden rounded-xl border border-[#168e70] bg-[#eaf0ed] lg:h-[650px] xl:h-[720px]">
+    <div className="relative h-[550px] min-h-[450px] w-full overflow-hidden rounded-xl border border-[#168e70] bg-[#eaf0ed]">
 
       {/* Illustrative Colombo map */}
       <svg
