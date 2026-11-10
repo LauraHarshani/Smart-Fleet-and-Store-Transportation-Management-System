@@ -165,35 +165,25 @@ const BookingApprovalLog = () => {
   return (
     <div className="min-h-full space-y-6">
       {/* Page Heading */}
-      <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-[#173F35]">
+            Approval Log
+          </h1>
+
+          <p className="mt-1 text-sm text-[#64748B]">
+            Track booking approval decisions and review activities.
+          </p>
+        </div>
+
         <button
           type="button"
           onClick={() => navigate("/bookings")}
-          className="mb-4 flex items-center gap-2 text-sm font-medium text-gray-500 transition hover:text-[#27866A]"
+          className="flex items-center gap-2 text-sm font-medium text-gray-500 transition hover:text-[#27866A]"
         >
           <ArrowLeft size={16} />
           Back to Booking Review
         </button>
-
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-              <span>Operations</span>
-              <span>›</span>
-              <span>Bookings</span>
-              <span>›</span>
-              <span className="text-[#27866A]">Approval Log</span>
-            </div>
-
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-              Approval Log
-            </h1>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Track booking approval decisions and review activities.
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Summary Cards */}

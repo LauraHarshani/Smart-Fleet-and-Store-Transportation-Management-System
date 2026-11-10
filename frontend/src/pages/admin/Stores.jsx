@@ -415,7 +415,7 @@ export default function Stores() {
 
   if (currentView === 'edit' && editingStore) {
     return (
-      <div className="p-8 bg-[#f8faf9] min-h-screen font-sans text-gray-800">
+      <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
         
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
@@ -717,21 +717,15 @@ export default function Stores() {
   }
 
   return (
-    <div className="p-8 bg-[#f8faf9] min-h-screen font-sans text-gray-800">
+    <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
       
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-          <span>MASTER DATA</span> <span className="text-gray-300">/</span> <span>STORE MANAGEMENT</span>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex justify-between items-center mb-5">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight leading-none">Store Management</h1>
+            <h1 className="text-2xl font-bold text-[#173F35]">Store Management</h1>
             <span className="bg-[#d1f4e0] text-[#0d9468] px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide">3 Active Hubs</span>
           </div>
-          <p className="text-xs text-gray-500 mt-2 tracking-wide">Central freight distribution depots, cold-chain hubs, and coastal maritime staging points<br/>across Sri Lanka.</p>
+          <p className="mt-1 text-sm text-[#64748B]">Central freight distribution depots, cold-chain hubs, and coastal maritime staging points across Sri Lanka.</p>
         </div>
         <div className="flex gap-3">
           <button onClick={handleExportCSV} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-50 shadow-sm transition-all">

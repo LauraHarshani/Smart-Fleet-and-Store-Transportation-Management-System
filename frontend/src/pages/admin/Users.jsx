@@ -765,24 +765,13 @@ export default function Users() {
   // 3. MAIN LIST VIEW
   // -------------------------
   return (
-    <div className="p-8 bg-[#f8faf9] min-h-screen font-sans">
-      <div className="flex justify-between items-center mb-6">
+    <div className="bg-[#f8faf9] min-h-full font-sans">
+      <div className="flex justify-between items-center mb-5">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            <span>MASTER DATA</span> <span className="text-gray-400">&gt;</span> <span className="text-[#0fa979]">USER MANAGEMENT</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-            <div className="text-xs font-semibold text-gray-500 bg-gray-200 px-3 py-1 rounded-full flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-400"></span>
-                REGION: SRI LANKA CENTRAL (CMB/KDY/GAL)
-            </div>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <h1 className="text-[32px] font-bold text-gray-900 leading-tight">User Management</h1>
+          <h1 className="text-2xl font-bold text-[#173F35]">User Management</h1>
+          <p className="mt-1 text-sm text-[#64748B]">
+            Manage user accounts, roles, and access across the fleet system.
+          </p>
           <div className="flex gap-3 mt-3 text-xs font-bold uppercase tracking-wider">
             <span className="bg-gray-200 px-3 py-1.5 rounded-md text-gray-700">TOTAL USERS: {users.length}</span>
             <span className="bg-[#d1f4e0] px-3 py-1.5 rounded-md text-[#0d9468] flex items-center gap-1.5">

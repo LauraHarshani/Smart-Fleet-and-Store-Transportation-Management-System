@@ -361,11 +361,11 @@ export default function LiveTracking() {
     <div className="min-h-full bg-[#f4f7f3] -m-8 p-6 sm:p-8">
 
       {/* Page heading */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+      <div className="mb-5">
+        <h2 className="text-2xl font-bold text-[#173F35]">
           Live Fleet Monitoring &amp; Tracking
         </h2>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-[#64748B]">
           Monitor vehicle locations, planned routes, and real-time trip progress across all stores.
         </p>
       </div>
