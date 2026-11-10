@@ -1,9 +1,37 @@
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { 
     Truck, LayoutDashboard, CalendarCheck, Route as RouteIcon, 
     CalendarDays, MapPin, Users, Store, Package, UserCog, 
-    LineChart, User, LogOut, Bell 
+    LineChart, User, LogOut, Bell, Check, ClipboardList
 } from 'lucide-react';
+
+const initialNotifications = [
+    {
+        id: 1,
+        title: 'Booking awaiting approval',
+        message: 'A new store replenishment booking is ready for review.',
+        time: '10 minutes ago',
+        icon: CalendarCheck,
+        read: false,
+    },
+    {
+        id: 2,
+        title: 'Vehicle maintenance due',
+        message: 'A vehicle in the fleet has scheduled maintenance coming up.',
+        time: '1 hour ago',
+        icon: Truck,
+        read: false,
+    },
+    {
+        id: 3,
+        title: 'Inventory updated',
+        message: 'Store inventory information has been updated.',
+        time: 'Yesterday',
+        icon: ClipboardList,
+        read: true,
+    },
+];
 
 const pageTitles = {
     '/dashboard': 'Dashboard',
@@ -44,11 +72,36 @@ const NavCategory = ({ title }) => (
 const AdminLayout = () => {
     const location = useLocation();
     const pageTitle = pageTitles[location.pathname] ?? '';
+    const [notifications, setNotifications] = useState(initialNotifications);
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const notificationPanelRef = useRef(null);
+    const unreadCount = notifications.filter((notification) => !notification.read).length;
 
     // Helper function to check if the current path matches the link (for active state)
     const isActive = (path) =>
         location.pathname === path ||
         (path === '/bookings' && location.pathname === '/approval-log');
+
+    useEffect(() => {
+        if (!isNotificationsOpen) return undefined;
+
+        const handlePointerDown = (event) => {
+            if (!notificationPanelRef.current?.contains(event.target)) {
+                setIsNotificationsOpen(false);
+            }
+        };
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') setIsNotificationsOpen(false);
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isNotificationsOpen]);
 
     return (
         <div className="flex h-screen bg-[#f4f7f6]">
@@ -101,10 +154,93 @@ const AdminLayout = () => {
                     <h1 className="text-xl font-bold text-gray-800">{pageTitle}</h1>
                     
                     <div className="flex items-center gap-6">
-                        <button className="text-gray-500 hover:text-gray-700 relative">
-                            <Bell size={22} />
-                            <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-                        </button>
+                        <div className="relative" ref={notificationPanelRef}>
+                            <button
+                                type="button"
+                                onClick={() => setIsNotificationsOpen((open) => !open)}
+                                className="relative rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
+                                aria-expanded={isNotificationsOpen}
+                                aria-haspopup="dialog"
+                            >
+                                <Bell size={22} />
+                                {unreadCount > 0 && (
+                                    <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500"></span>
+                                )}
+                            </button>
+
+                            {isNotificationsOpen && (
+                                <section
+                                    className="absolute right-0 top-full z-50 mt-3 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+                                    role="dialog"
+                                    aria-label="Notifications"
+                                >
+                                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                                        <div>
+                                            <h2 className="text-sm font-bold text-gray-900">Notifications</h2>
+                                            <p className="mt-0.5 text-xs text-gray-500">
+                                                {unreadCount ? `${unreadCount} unread` : "You're all caught up"}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setNotifications((current) =>
+                                                current.map((notification) => ({ ...notification, read: true }))
+                                            )}
+                                            disabled={unreadCount === 0}
+                                            className="text-xs font-semibold text-[#0fa979] transition hover:text-[#113b2e] disabled:cursor-default disabled:text-gray-400"
+                                        >
+                                            Mark all as read
+                                        </button>
+                                    </div>
+
+                                    <div className="max-h-[min(420px,70vh)] overflow-y-auto">
+                                        {notifications.map((notification) => {
+                                            const NotificationIcon = notification.icon;
+
+                                            return (
+                                                <button
+                                                    key={notification.id}
+                                                    type="button"
+                                                    onClick={() => setNotifications((current) =>
+                                                        current.map((item) => item.id === notification.id
+                                                            ? { ...item, read: true }
+                                                            : item
+                                                        )
+                                                    )}
+                                                    className={`flex w-full gap-3 border-b border-gray-100 px-4 py-3 text-left transition hover:bg-gray-50 last:border-b-0 ${
+                                                        notification.read ? 'bg-white' : 'bg-emerald-50/40'
+                                                    }`}
+                                                >
+                                                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e8f8f2] text-[#0fa979]">
+                                                        <NotificationIcon size={17} />
+                                                    </span>
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="flex items-center justify-between gap-2">
+                                                            <span className="text-sm font-semibold text-gray-800">
+                                                                {notification.title}
+                                                            </span>
+                                                            {!notification.read && (
+                                                                <span className="h-2 w-2 shrink-0 rounded-full bg-[#0fa979]" />
+                                                            )}
+                                                        </span>
+                                                        <span className="mt-1 block text-xs leading-relaxed text-gray-600">
+                                                            {notification.message}
+                                                        </span>
+                                                        <span className="mt-1.5 block text-[11px] text-gray-400">
+                                                            {notification.time}
+                                                        </span>
+                                                    </span>
+                                                    {notification.read && (
+                                                        <Check size={14} className="mt-1 shrink-0 text-gray-300" aria-label="Read" />
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </section>
+                            )}
+                        </div>
                         
                         <div className="flex items-center gap-3 border-l pl-6 border-gray-200">
                             <div className="w-10 h-10 rounded-full bg-[#113b2e] flex items-center justify-center text-white font-semibold text-sm">
