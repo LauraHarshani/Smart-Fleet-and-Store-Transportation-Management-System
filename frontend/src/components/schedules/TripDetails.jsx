@@ -20,6 +20,7 @@ const statusStyles = {
 
 const TripDetails = ({
   trip,
+  selectedDate,
   onClose,
   onUpdateStatus,
   statusOptions,
@@ -76,6 +77,12 @@ const TripDetails = ({
             icon={Package}
             label="Load"
             value={trip.load}
+          />
+
+          <InfoItem
+            icon={CalendarCheck}
+            label="Trip Date"
+            value={selectedDate}
           />
 
           <InfoItem
