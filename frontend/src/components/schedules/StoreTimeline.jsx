@@ -2,6 +2,14 @@ import { Store, ChevronDown } from "lucide-react";
 
 const HOURS = Array.from({ length: 13 }, (_, index) => index + 7);
 
+//for store filtering
+const STORES = [
+  "All Stores",
+  "Colombo Store",
+  "Kandy Store",
+  "Galle Store",
+];
+
 const slotStyles = {
   Loading: {
     bg: "#DCFCE7",
@@ -44,11 +52,6 @@ const StoreTimeline = ({
   slotTypeFilter,
   setSlotTypeFilter,
 }) => {
-  const stores = [
-    "All Stores",
-    ...new Set(slots.map((slot) => slot.store)),
-  ];
-
   const slotTypes = [
     "All Slot Types",
     "Loading",
@@ -56,11 +59,7 @@ const StoreTimeline = ({
     "Maintenance",
   ];
 
-  const storeOrder = [
-    "Colombo Store",
-    "Kandy Store",
-    "Galle Store",
-  ];
+  const storeOrder = STORES.slice(1);
 
   const visibleStores = storeOrder.filter((store) =>
     slots.some((slot) => slot.store === store)
@@ -77,7 +76,7 @@ const StoreTimeline = ({
               onChange={(event) => setStoreFilter(event.target.value)}
               className="h-10 min-w-[140px] appearance-none rounded-xl border border-[#27866A] bg-white py-2 pl-4 pr-9 text-sm text-gray-600 outline-none focus:ring-2 focus:ring-[#B5D6A7]"
             >
-              {stores.map((store) => (
+              {STORES.map((store) => (
                 <option key={store} value={store}>
                   {store}
                 </option>
@@ -197,6 +196,10 @@ const StoreTimeline = ({
                       const right = timeToPercent(slot.end);
                       const width = right - left;
                       const isSelected = selectedSlotId === slot.id;
+                      const formatTime = (time) => {
+                        const [hours, minutes] = time.split(":");
+                        return `${Number(hours)}:${minutes}`;
+                      };
 
                       return (
                         <button
@@ -216,10 +219,12 @@ const StoreTimeline = ({
                           }}
                         >
                           <span className="truncate text-xs font-bold">
-                            {slot.id}
+                            {slot.type === "Maintenance" ? slot.type : slot.id}
                           </span>
                           <span className="truncate text-[10px]">
-                            {slot.type}
+                            {slot.type === "Maintenance"
+                              ? `${formatTime(slot.start)} - ${formatTime(slot.end)}`
+                              : slot.type}
                           </span>
                         </button>
                       );
