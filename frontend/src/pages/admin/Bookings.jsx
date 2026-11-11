@@ -11,7 +11,6 @@ import {
   RefreshCcw,
   Printer,
   History,
-  SlidersHorizontal,
   Warehouse,
   Store,
   ArrowRight,
@@ -547,13 +546,13 @@ const Bookings = () => {
             Approval Log
           </button>
 
-          <button
+          {/* <button
             type="button"
             className="flex items-center gap-2 rounded-lg bg-[#E5E8E6] px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-[#D9DFDB]"
           >
             <SlidersHorizontal size={15} />
             Preferences
-          </button>
+          </button> */}
         </div>
       </div>
 
