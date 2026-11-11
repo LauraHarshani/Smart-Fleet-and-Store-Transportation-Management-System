@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AuthGuard from './components/AuthGuard';
+
+//admin paths
 import AdminLayout from './layouts/AdminLayout';
 import Dashboard from './pages/admin/Dashboard';
 import Login from './pages/Login';
@@ -13,12 +15,21 @@ import Schedules from './pages/admin/Schedules';
 import LiveTracking from './pages/admin/LiveTracking';
 import BookingApprovalLog from './pages/admin/BookingApprovalLog';
 
+//Store paths
+import StoreLayout from './layouts/StoreLayout';
+import StoreBookings from './pages/store/StoreBookings';
+import GoodsHandling from './pages/store/GoodsHandling';
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/*default Routes*/}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
         <Route path="/login" element={<Login />} />
 
+        {/*Admin routes*/}
         <Route element={<AuthGuard allowedRoles={['System Administrator']} />}>
           <Route element={<AdminLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -36,7 +47,16 @@ function App() {
           </Route>
         </Route>
 
-        {/* <Route path="*" element={<Navigate to="/login" replace />} /> */}
+        {/*Store routes*/}
+        <Route element={<AuthGuard allowedRoles={['Store Manager','Store Employee']} />}>
+          <Route path='/store' element={<StoreLayout/>}>
+            <Route path='bookings' element={<StoreBookings/>} />
+            <Route path='goods-handling' element={<GoodsHandling/>} />
+          </Route>
+        </Route>
+
+        {/* Unknown Routes */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
