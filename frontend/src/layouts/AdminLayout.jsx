@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
     Truck, LayoutDashboard, CalendarCheck, Route as RouteIcon, 
     CalendarDays, MapPin, Users, Store, Package, UserCog, 
@@ -71,6 +71,7 @@ const NavCategory = ({ title }) => (
 
 const AdminLayout = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const pageTitle = pageTitles[location.pathname] ?? '';
     const [notifications, setNotifications] = useState(initialNotifications);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -140,7 +141,11 @@ const AdminLayout = () => {
                 {/* Bottom Profile Area */}
                 <div className="py-4 border-t border-white/10 mt-auto">
                     <NavItem to="/profile" icon={User} label="Profile" active={isActive('/profile')} />
-                    <button className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-red-500/15 hover:text-red-300 transition-colors">
+                    <button
+                        type="button"
+                        onClick={() => navigate('/login')}
+                        className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-red-500/15 hover:text-red-300 transition-colors"
+                    >
                         <LogOut size={20} />
                         <span className="text-sm">Sign Out</span>
                     </button>
