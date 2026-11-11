@@ -13,20 +13,53 @@ export default function Login() {
   
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (!email || !password) {
-      alert('Please enter both email and password');
-      return;
-    }
-    
-    localStorage.setItem('isAuthenticated', 'true');
-    localStorage.setItem('token', 'mock-jwt-token-12345');
-    localStorage.setItem('role', 'System Administrator');
-    localStorage.setItem('userEmail', email);
-    
-    navigate('/dashboard');
+  
+const handleLogin = (e) => {
+  e.preventDefault();
+
+  if (!email || !password) {
+    alert("Please enter both email and password");
+    return;
+  }
+
+  // Temporary mock users for frontend testing
+  const mockUsers = {
+    "admin@ex.com": {
+      role: "System Administrator",
+      name: "Admin",
+      redirect: "/dashboard",
+    },
+
+    "manager@ex.com": {
+      role: "Store Manager",
+      name: "Store Manager",
+      redirect: "/store/bookings",
+    },
+
+    "emp@ex.com": {
+      role: "Store Employee",
+      name: "Store Employee",
+      redirect: "/store/bookings",
+    },
   };
+
+  const user = mockUsers[email.toLowerCase().trim()];
+
+  if (!user) {
+    alert("Invalid email address. Please try again.");
+    return;
+  }
+
+  // Temporary mock authentication
+  localStorage.setItem("isAuthenticated", "true");
+  localStorage.setItem("token", "mock-jwt-token-12345");
+  localStorage.setItem("role", user.role);
+  localStorage.setItem("userEmail", email);
+  localStorage.setItem("userName", user.name);
+
+  navigate(user.redirect);
+};
+
 
   const handleForgotPasswordSubmit = (e) => {
     e.preventDefault();
@@ -110,7 +143,7 @@ export default function Login() {
         <div className="w-full max-w-[420px] bg-white p-8 sm:p-10 rounded-3xl border border-gray-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)]">
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Sign In</h2>
-            <p className="text-xs text-gray-500 mt-1">Sign in to your LogiFleet account</p>
+            <p className="text-xs text-gray-500 mt-1">Sign in to your <span className='text-[#0fa979]'>LogiFleet</span> account</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
