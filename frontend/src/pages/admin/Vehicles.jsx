@@ -515,7 +515,7 @@ export default function Vehicles() {
 
   if (currentView === 'edit' && editingVehicle) {
     return (
-      <div className="p-8 bg-[#f8faf9] min-h-screen font-sans text-gray-800">
+      <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
         
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
@@ -822,16 +822,12 @@ export default function Vehicles() {
   // 3. MAIN VEHICLE LIST VIEW
   // ----------------------------------------------------
   return (
-    <div className="p-8 bg-[#f8faf9] min-h-screen font-sans text-gray-800">
+    <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
       
-      <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-        <span>MASTER DATA</span> <span className="text-gray-300">&gt;</span> <span className="text-[#0fa979]">VEHICLE MANAGEMENT</span>
-      </div>
-
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex justify-between items-center mb-5">
         <div>
           <div className="flex items-center gap-4 mb-2">
-            <h1 className="text-[28px] font-extrabold text-[#113b2e] tracking-tight leading-none">Vehicle Management</h1>
+            <h1 className="text-2xl font-bold text-[#173F35]">Vehicle Management</h1>
             <div className="flex gap-2">
                <span className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span> Total Vehicles: {vehicles.length}</span>
                <span className="bg-[#d1f4e0] text-[#0d9468] px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> Active: {vehicles.filter(v => v.status.includes('Active')).length}</span>
@@ -839,6 +835,9 @@ export default function Vehicles() {
                <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Standby: {vehicles.filter(v => v.status.includes('Standby')).length}</span>
             </div>
           </div>
+          <p className="mt-1 text-sm text-[#64748B]">
+            Manage fleet vehicles, availability, and maintenance status.
+          </p>
         </div>
         <div className="flex gap-3">
           <button onClick={handleExportCSV} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 shadow-sm transition-all">

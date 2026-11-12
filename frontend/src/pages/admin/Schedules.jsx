@@ -391,13 +391,13 @@ const Schedules = () => {
   return (
     <div className="min-h-full bg-[#F5F7F2]">
       {/* Page heading */}
-      <div className="mb-8 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+      <div className="mb-5 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-[#173F35]">
             Slot Scheduling & Fleet Timeline
           </h1>
 
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-[#64748B]">
             View and manage vehicle schedules and store time slots
           </p>
         </div>

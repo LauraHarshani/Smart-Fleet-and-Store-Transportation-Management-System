@@ -355,7 +355,7 @@ export default function Items() {
   // ----------------------------------------------------
   if (currentView === 'edit' && editingItem) {
     return (
-      <div className="p-8 bg-[#f8faf9] min-h-screen font-sans text-gray-800">
+      <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
         
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
@@ -647,22 +647,21 @@ export default function Items() {
   // 3. MAIN LIST VIEW
   // ----------------------------------------------------
   return (
-    <div className="p-8 bg-[#f8faf9] min-h-screen font-sans text-gray-800">
+    <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
       
-      <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-        <span>MASTER DATA</span> <span className="text-gray-300">&gt;</span> <span className="text-[#0fa979]">ITEM MANAGEMENT</span>
-      </div>
-
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex justify-between items-center mb-5">
         <div>
           <div className="flex items-center gap-4 mb-2">
-            <h1 className="text-[28px] font-extrabold text-[#113b2e] tracking-tight leading-none">Item Management</h1>
+            <h1 className="text-2xl font-bold text-[#173F35]">Item Management</h1>
             <div className="flex gap-2">
                <span className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5">Total SKUs: {items.length}</span>
                <span className="bg-[#d1f4e0] text-[#0d9468] px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5">Active: {items.filter(i => i.status === 'Active').length}</span>
                <span className="bg-red-50 text-red-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 border border-red-100">Low Stock / Alert: 16</span>
             </div>
           </div>
+          <p className="mt-1 text-sm text-[#64748B]">
+            Browse the inventory catalog and monitor stock availability.
+          </p>
         </div>
         <div className="flex gap-3">
           <button onClick={handleExportCSV} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 shadow-sm transition-all cursor-pointer">

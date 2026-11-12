@@ -40,17 +40,12 @@ export default function Profile() {
   };
 
   return (
-    <div className="p-8 bg-[#f8faf9] min-h-screen font-sans text-gray-800">
+    <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
       
-      {/* Header Path */}
-      <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-        <span>ADMIN</span> <span className="text-gray-300">&gt;</span> <span className="text-[#0fa979]">USER PROFILE</span>
-      </div>
-
-      <div className="flex justify-between items-end mb-8">
+      <div className="flex justify-between items-center mb-5">
         <div>
-          <h1 className="text-[28px] font-extrabold text-[#113b2e] tracking-tight leading-none">Admin Profile Settings</h1>
-          <p className="text-xs text-gray-500 mt-2">Manage your personal credentials, system permissions, and security authentication parameters.</p>
+          <h1 className="text-2xl font-bold text-[#173F35]">Admin Profile Settings</h1>
+          <p className="mt-1 text-sm text-[#64748B]">Manage your personal credentials, system permissions, and security settings.</p>
         </div>
       </div>
 
