@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
     Truck, LayoutDashboard, CalendarCheck, Route as RouteIcon, 
     CalendarDays, MapPin, Users, Store, Package, UserCog, 
@@ -85,6 +85,7 @@ const notificationTabs = ['All', 'Alerts', 'Trips', 'System'];
 const pageTitles = {
     '/dashboard': 'Dashboard',
     '/bookings': 'Bookings',
+    '/approval-log': 'Bookings',
     '/trip-planning': 'Trip Planning',
     '/schedules': 'Vehicle Schedule',
     '/live-tracking': 'Live Tracking',
@@ -119,6 +120,7 @@ const NavCategory = ({ title }) => (
 
 const AdminLayout = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const pageTitle = pageTitles[location.pathname] ?? '';
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [notifications, setNotifications] = useState(initialNotifications);
@@ -154,22 +156,24 @@ const AdminLayout = () => {
         );
     };
 
-    // වත්මන් path සහ ලින්කය ගැළපේද යන්න පරීක්ෂා කරන උපකාරක ශ්‍රිතය (සක්‍රීය තත්වය සඳහා)
-    const isActive = (path) => location.pathname === path;
+    // Helper function to check if the current path matches the link (for active state)
+    const isActive = (path) =>
+        location.pathname === path ||
+        (path === '/bookings' && location.pathname === '/approval-log');
 
     return (
         <div className="flex h-screen bg-[#f4f7f6]">
-            {/* පැති තීරුව */}
+            {/* Sidebar */}
             <aside className="w-[260px] bg-[#113b2e] text-white flex flex-col overflow-hidden">
-                {/* ලාංඡනය ප්‍රදේශය */}
-                <div className="p-6">
+                {/* Logo Area */}
+                <div className="p-6 border-b border-white/10">
                     <div className="flex items-center gap-2 font-bold text-2xl tracking-wide">
                         LogiFleet <Truck size={24} className="mt-1" />
                     </div>
                     <div className="text-xs text-gray-400 mt-1">Fleet & Store Management</div>
                 </div>
 
-                {/* සංචාලන සබැඳි - සඟවා ඇති scroll bar class මෙතන එක් කර ඇත */}
+                {/* Navigation links - the scrollbar-hide class hides the scroll bar here */}
                 <nav className="flex-1 overflow-y-auto pb-4 scrollbar-hide">
                     <NavCategory title="Overview" />
                     <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" active={isActive('/dashboard')} />
@@ -191,19 +195,23 @@ const AdminLayout = () => {
                     <NavItem to="/reports" icon={LineChart} label="Reports" active={isActive('/reports')} />
                 </nav>
 
-                {/* පහළ පැති මාර්ගෝපදේශ ප්‍රදේශය */}
+                {/* Bottom sidebar area */}
                 <div className="py-4 border-t border-white/10 mt-auto">
                     <NavItem to="/profile" icon={User} label="Profile" active={isActive('/profile')} />
-                    <button className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-red-500/15 hover:text-red-300 transition-colors">
+                    <button
+                        type="button"
+                        onClick={() => navigate('/login')}
+                        className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-red-500/15 hover:text-red-300 transition-colors"
+                    >
                         <LogOut size={20} />
                         <span className="text-sm">Sign Out</span>
                     </button>
                 </div>
             </aside>
 
-            {/* ප්‍රධාන අන්තර්ගත ප්‍රදේශය */}
+            {/* Main content area */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {/* ඉහළ ශීර්ෂයක් */}
+                {/* Top header */}
                 <header className="h-16 bg-white flex items-center justify-between px-8 border-b border-gray-200">
                     <h1 className="text-xl font-bold text-gray-800">{pageTitle}</h1>
                     
@@ -233,7 +241,7 @@ const AdminLayout = () => {
                     </div>
                 </header>
 
-                {/* පිටුවේ අන්තර්ගතය (Outlet) */}
+                {/* Page content (Outlet) */}
                 <main className="flex-1 overflow-auto p-8">
                     <Outlet />
                 </main>
