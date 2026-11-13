@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, Download, Plus, Calendar, ChevronRight, Truck, 
-  CheckCircle2, History, Edit2, PackageCheck, ArrowLeft, 
-  MapPin, Clock, Package, Trash2, ShieldAlert, Navigation, Save, Send 
+  CheckCircle2, History, Edit2, ArrowLeft, 
+  MapPin, Clock, Package, Trash2, ShieldAlert, Save, Send 
 } from 'lucide-react';
 
 // ==========================================
-// 1. CREATE BOOKING COMPONENT (FE-3)
+// 1. CREATE / EDIT BOOKING COMPONENT (FE-3)
 // ==========================================
-const CreateBookingView = ({ onBack }) => {
+const CreateBookingView = ({ onBack, editData }) => {
   const [formData, setFormData] = useState({
     pickupStore: 'Colombo Main Store (Peliyagoda Central Hub - LK-WP)',
     destinationStore: '',
@@ -23,6 +23,34 @@ const CreateBookingView = ({ onBack }) => {
   ]);
 
   const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (editData) {
+      setFormData({
+        pickupStore: editData.from || 'Colombo Main Store (Peliyagoda Central Hub - LK-WP)',
+        destinationStore: editData.to || '',
+        dispatchDate: editData.date ? editData.date.split(' - ')[0] : '', 
+        timeSlot: 'Morning Prime: 09:00 AM - 12:00 PM IST', 
+        specialInstructions: editData.cargo || '', 
+        directives: ['+ Keep Dry'] 
+      });
+
+      if (editData.consignments) {
+        const mockItems = [];
+        for (let i = 0; i < editData.consignments; i++) {
+          mockItems.push({
+            id: Date.now() + i,
+            itemType: 'Pure Ceylon Black Tea (BOPF) - 25kg Cartons (Export Grade)',
+            quantity: '10',
+            unit: 'Cartons',
+            weight: (parseInt(editData.totalWeight?.replace(/,/g, '')) / editData.consignments).toString() || '1000',
+            weightUnit: 'kg'
+          });
+        }
+        setItems(mockItems);
+      }
+    }
+  }, [editData]);
 
   const itemTypes = [
     'Pure Ceylon Black Tea (BOPF) - 25kg Cartons (Export Grade)',
@@ -73,8 +101,8 @@ const CreateBookingView = ({ onBack }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      console.log('Valid Form Submit:', { formData, items });
-      alert("Booking created successfully!");
+      console.log(editData ? 'Valid Form Update:' : 'Valid Form Submit:', { formData, items });
+      alert(editData ? "Booking updated successfully!" : "Booking created successfully!");
       onBack();
     }
   };
@@ -83,87 +111,96 @@ const CreateBookingView = ({ onBack }) => {
   const payloadPercentage = Math.min((totalWeight / 5000) * 100, 100).toFixed(0);
 
   return (
-    <div className="flex flex-col bg-gray-50 w-full min-h-full">
-      {/* Header - No sticky, scrolls naturally */}
-      <div className="bg-white px-8 py-6 border-b border-gray-200">
-        <div className="flex items-center text-sm font-medium text-gray-500 mb-4">
+    <div className="flex flex-col bg-white w-full min-h-full">
+      {/* Header */}
+      <div className="px-8 py-6 bg-white">
+        <div className="flex items-center text-xs font-medium text-gray-400 mb-6">
           <button onClick={onBack} className="hover:text-gray-700 hover:underline">Bookings</button>
-          <ChevronRight size={14} className="mx-1" />
-          <span className="text-green-800">Create Booking</span>
+          <ChevronRight size={14} className="mx-2" />
+          <span className="text-green-700 font-semibold">{editData ? 'Edit Booking' : 'Create Booking'}</span>
         </div>
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Create New Booking</h1>
-            <p className="text-sm text-gray-500 mt-1">Enter transportation request and dispatch manifest specifications</p>
+            <h1 className="text-2xl font-bold text-gray-900">{editData ? `Edit Booking #${editData.id}` : 'Create New Booking'}</h1>
+            <p className="text-sm text-gray-400 mt-1">Modify transportation request and dispatch manifest specifications</p>
           </div>
-          <div className="flex gap-2">
-            <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Draft Booking #BKG-2026-0984
+          <div className="flex gap-3">
+            <span className="px-3 py-1.5 bg-gray-50 text-gray-600 rounded-full text-[10px] font-bold tracking-wide flex items-center gap-1.5 border border-gray-100">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> {editData ? 'Editing Booking' : 'Draft Booking #BKG-2026-0984'}
             </span>
-            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium flex items-center gap-1">
-              <CheckCircle2 size={12} /> TMS Tier-1 Node
+            <span className="px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-[10px] font-bold tracking-wide flex items-center gap-1.5 border border-green-100">
+              <CheckCircle2 size={14} /> TMS Tier-1 Node
             </span>
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto w-full p-8 space-y-8 flex-1">
-        <form onSubmit={handleSubmit} id="create-booking-form" className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 space-y-10">
+      <div className="px-8 pb-8 flex-1">
+        <form onSubmit={handleSubmit} id="create-booking-form" className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           
           {/* Logistics Route */}
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <MapPin className="text-[#113b2e]" size={20} /> Logistics Route
+          <div className="p-8">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <MapPin className="text-green-700" size={18} /> Logistics Route
               </h2>
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Island Network (LK)</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Island Network (LK)</span>
             </div>
-            <div className="grid grid-cols-2 gap-6 mb-6">
+            
+            <p className="text-[10px] text-gray-400 mb-6 -mt-4 pl-7">Select authorized distribution hubs and staging warehouses</p>
+
+            <div className="grid grid-cols-2 gap-8 pl-7 mb-6">
               <div>
-                <label className="flex justify-between text-xs font-bold text-gray-700 mb-2">
-                  <span className="flex items-center gap-1 text-[#113b2e]"><div className="w-2 h-2 rounded-full border-2 border-[#113b2e]"></div> Pickup Store / Hub</span>
+                <label className="flex justify-between text-[11px] font-bold text-gray-700 mb-2">
+                  <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full border-2 border-green-700"></div> Pickup Store / Hub</span>
                   <span className="text-gray-400 font-normal">Origin Gate 04</span>
                 </label>
-                <select className="w-full p-3 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-700 outline-none">
-                  <option>{formData.pickupStore}</option>
-                </select>
-                <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Coordinates: 6.9491° N, 79.8887° E • Bay clearance standard
+                <div className="relative">
+                  <select className="w-full p-3.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600 outline-none appearance-none">
+                    <option>{formData.pickupStore}</option>
+                  </select>
+                  <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-green-500"></span> Coordinates: 6.9491° N, 79.8887° E • Bay clearance standard
                 </p>
               </div>
               <div>
-                <label className="flex justify-between text-xs font-bold text-gray-700 mb-2">
-                  <span className="flex items-center gap-1 text-red-500"><div className="w-2 h-2 rounded-full border-2 border-red-500"></div> Destination Store / Depot</span>
+                <label className="flex justify-between text-[11px] font-bold text-gray-700 mb-2">
+                  <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full border-2 border-red-500"></div> Destination Store / Depot</span>
                   <span className="text-gray-400 font-normal">Terminal Berth 2</span>
                 </label>
-                <select value={formData.destinationStore} onChange={(e) => setFormData({...formData, destinationStore: e.target.value})} className={`w-full p-3 border rounded-md text-sm bg-white outline-none focus:ring-1 focus:ring-[#113b2e] ${errors.destinationStore ? 'border-red-500' : 'border-gray-300'}`}>
-                  <option value="">Select destination hub...</option>
-                  <option value="Galle Coastal Staging Terminal (Dakshinapatha LK-SP)">Galle Coastal Staging Terminal (Dakshinapatha LK-SP)</option>
-                  <option value="Kandy Regional Depot">Kandy Regional Depot</option>
-                </select>
+                <div className="relative">
+                  <select value={formData.destinationStore} onChange={(e) => setFormData({...formData, destinationStore: e.target.value})} className={`w-full p-3.5 border rounded-lg text-sm bg-white outline-none appearance-none focus:ring-1 focus:ring-green-700 ${errors.destinationStore ? 'border-red-500' : 'border-gray-200'}`}>
+                    <option value="">Select destination hub...</option>
+                    <option value="Galle Coastal Staging Terminal (Dakshinapatha LK-SP)">Galle Coastal Staging Terminal (Dakshinapatha LK-SP)</option>
+                    <option value="Kandy Regional Depot">Kandy Regional Depot</option>
+                  </select>
+                  <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
+                </div>
                 {errors.destinationStore && <p className="text-red-500 text-xs mt-1">{errors.destinationStore}</p>}
-                <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Deep-water export access • Bonded Customs clearance ready
+                <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-green-500"></span> Deep-water export access • Bonded Customs clearance ready
                 </p>
               </div>
             </div>
             
             {formData.destinationStore && (
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex items-center justify-between">
+              <div className="ml-7 bg-green-50/50 rounded-lg p-5 border border-green-100 flex items-center justify-between">
                 <div className="flex gap-4 items-center">
-                  <div className="bg-green-200 w-8 h-8 flex items-center justify-center rounded text-green-800 font-bold text-sm">A</div>
+                  <div className="bg-green-100 w-8 h-8 flex items-center justify-center rounded-md text-green-800 font-bold text-sm">A</div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2">Direct Route via Southern Expressway (E01) <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Optimal ETA</span></p>
-                    <p className="text-xs text-gray-500 mt-0.5">Colombo Interchange (Kaduwela / Kottawa) → Galle Pinnaduwa Exit</p>
+                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-0.5">Direct Route via Southern Expressway (E01) <span className="text-[9px] bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Optimal ETA</span></p>
+                    <p className="text-[11px] text-gray-500">Colombo Interchange (Kaduwela / Kottawa) → Galle Pinnaduwa Exit</p>
                   </div>
                 </div>
                 <div className="flex gap-8 text-right">
                   <div>
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Distance</p>
+                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-widest mb-1">Distance</p>
                     <p className="text-sm font-bold text-gray-900">118.4 km</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Est. Transit</p>
+                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-widest mb-1">Est. Transit</p>
                     <p className="text-sm font-bold text-green-700">2h 15m</p>
                   </div>
                 </div>
@@ -171,166 +208,169 @@ const CreateBookingView = ({ onBack }) => {
             )}
           </div>
 
-          <hr className="border-gray-100" />
+          <hr className="border-gray-50 border-t-2" />
 
           {/* Schedule */}
-          <div>
+          <div className="p-8">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Calendar className="text-[#113b2e]" size={20} /> Dispatch Schedule
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <Calendar className="text-green-700" size={18} /> Dispatch Schedule
               </h2>
-              <span className="text-xs font-bold text-gray-500 tracking-wider">Timezone: UTC+05:30 (IST)</span>
+              <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">Timezone: UTC+05:30 (IST)</span>
             </div>
-            <p className="text-xs text-gray-500 mb-6 -mt-4 pl-7">Define pickup window compliance and driver arrival buffer</p>
-            <div className="grid grid-cols-2 gap-6 pl-7">
+            <p className="text-[10px] text-gray-400 mb-6 -mt-4 pl-7">Define pickup window compliance and driver arrival buffer</p>
+            
+            <div className="grid grid-cols-2 gap-8 pl-7">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Requested Pickup Date</label>
+                <label className="block text-[11px] font-bold text-gray-700 mb-2">Requested Pickup Date</label>
                 <div className="relative">
-                  <Calendar size={16} className="absolute left-3 top-3.5 text-gray-400" />
-                  <input type="date" value={formData.dispatchDate} onChange={(e) => setFormData({...formData, dispatchDate: e.target.value})} className={`w-full pl-10 p-3 border rounded-md text-sm outline-none focus:ring-1 focus:ring-[#113b2e] ${errors.dispatchDate ? 'border-red-500' : 'border-gray-300'}`} />
+                  <Calendar size={18} className="absolute left-4 top-3.5 text-gray-400" />
+                  <input type="date" value={formData.dispatchDate} onChange={(e) => setFormData({...formData, dispatchDate: e.target.value})} className={`w-full pl-12 p-3.5 border rounded-lg text-sm text-gray-600 outline-none focus:ring-1 focus:ring-green-700 ${errors.dispatchDate ? 'border-red-500' : 'border-gray-200'}`} />
                 </div>
                 {errors.dispatchDate && <p className="text-red-500 text-xs mt-1">{errors.dispatchDate}</p>}
-                <p className="text-[10px] text-gray-500 mt-2">Dispatch planned on operating business Sunday cycle</p>
+                <p className="text-[10px] text-gray-400 mt-2">Dispatch planned on operating business Sunday cycle</p>
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Loading Dock Time Slot</label>
+                <label className="block text-[11px] font-bold text-gray-700 mb-2">Loading Dock Time Slot</label>
                 <div className="relative">
-                  <Clock size={16} className="absolute left-3 top-3.5 text-gray-400" />
-                  <select value={formData.timeSlot} onChange={(e) => setFormData({...formData, timeSlot: e.target.value})} className={`w-full pl-10 p-3 border rounded-md text-sm bg-white outline-none focus:ring-1 focus:ring-[#113b2e] ${errors.timeSlot ? 'border-red-500' : 'border-gray-300'}`}>
+                  <Clock size={18} className="absolute left-4 top-3.5 text-gray-400" />
+                  <select value={formData.timeSlot} onChange={(e) => setFormData({...formData, timeSlot: e.target.value})} className={`w-full pl-12 p-3.5 border rounded-lg text-sm bg-white text-gray-600 outline-none appearance-none focus:ring-1 focus:ring-green-700 ${errors.timeSlot ? 'border-red-500' : 'border-gray-200'}`}>
                     <option value="">Select time slot...</option>
                     <option value="Morning Prime: 09:00 AM - 12:00 PM IST">Morning Prime: 09:00 AM - 12:00 PM IST</option>
                     <option value="Afternoon: 01:00 PM - 04:00 PM IST">Afternoon: 01:00 PM - 04:00 PM IST</option>
                   </select>
+                  <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
                 {errors.timeSlot && <p className="text-red-500 text-xs mt-1">{errors.timeSlot}</p>}
-                <p className="text-[10px] text-green-700 mt-2 flex items-center gap-1 font-medium"><ShieldAlert size={12}/> Driver must report 30 minutes ahead for chassis container seal checks</p>
+                <p className="text-[10px] text-green-700 mt-2 flex items-center gap-1.5 font-medium"><ShieldAlert size={12}/> Driver must report 30 minutes ahead for chassis container seal checks</p>
               </div>
             </div>
           </div>
 
-          <hr className="border-gray-100" />
+          <hr className="border-gray-50 border-t-2" />
 
           {/* Items to Transport */}
-          <div>
+          <div className="p-8">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <Package className="text-[#113b2e]" size={20} /> Items to Transport (Payload Manifest)
+                <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <Package className="text-green-700" size={18} /> Items to Transport (Payload Manifest)
                 </h2>
-                <p className="text-xs text-gray-500 mt-1 pl-7">Itemized consignment cargo breakdown with automated aggregate tare</p>
+                <p className="text-[10px] text-gray-400 mt-1 pl-7">Itemized consignment cargo breakdown with automated aggregate tare</p>
               </div>
-              <span className="text-xs font-bold bg-gray-100 px-3 py-1 rounded">{items.length} Consignments</span>
+              <span className="text-[10px] font-bold text-gray-500 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-full">{items.length} Consignments</span>
             </div>
             
-            <div className="space-y-4 pl-7">
+            <div className="space-y-4 pl-7 mt-8">
               {items.map((item, index) => (
-                <div key={item.id} className="flex gap-4 items-center bg-white border border-gray-100 rounded-lg p-3 shadow-sm hover:border-gray-200 transition-colors">
-                  <div className="flex-1">
-                    <select value={item.itemType} onChange={(e) => handleItemChange(item.id, 'itemType', e.target.value)} className={`w-full p-2 border-b text-sm bg-transparent outline-none focus:border-[#113b2e] ${errors.items?.[index]?.itemType ? 'border-red-500' : 'border-gray-200'}`}>
+                <div key={item.id} className="flex gap-4 items-center bg-gray-50/30 border border-gray-100 rounded-xl p-4 transition-colors">
+                  <div className="flex-1 relative">
+                    <select value={item.itemType} onChange={(e) => handleItemChange(item.id, 'itemType', e.target.value)} className={`w-full p-3 border-b text-sm bg-transparent text-gray-600 outline-none appearance-none focus:border-green-700 ${errors.items?.[index]?.itemType ? 'border-red-500' : 'border-gray-200'}`}>
                       <option value="">Select item...</option>
                       {itemTypes.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
+                    <ChevronRight className="absolute right-2 top-3.5 rotate-90 text-gray-400" size={16} />
                   </div>
                   
                   <div className="w-32 flex items-center border-b border-gray-200 pb-1">
-                    <input type="number" min="1" value={item.quantity} onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)} className={`w-full p-2 text-sm outline-none ${errors.items?.[index]?.quantity ? 'text-red-500 placeholder-red-300' : 'text-gray-900'}`} placeholder="Qty" />
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider px-2">{item.unit}</span>
+                    <input type="number" min="1" value={item.quantity} onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)} className={`w-full p-2 text-sm outline-none bg-transparent ${errors.items?.[index]?.quantity ? 'text-red-500 placeholder-red-300' : 'text-gray-600'}`} placeholder="Qty" />
+                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest px-2">{item.unit}</span>
                   </div>
                   
-                  <div className="w-32 flex items-center border-b border-gray-200 pb-1 bg-green-50/20 px-2 rounded-t">
-                    <Package size={14} className="text-green-700 shrink-0" />
-                    <input type="number" min="0.1" step="0.1" value={item.weight} onChange={(e) => handleItemChange(item.id, 'weight', e.target.value)} className={`w-full p-2 text-sm text-right outline-none font-bold text-gray-900 bg-transparent ${errors.items?.[index]?.weight ? 'text-red-500 placeholder-red-300' : ''}`} placeholder="Weight" />
-                    <span className="text-[10px] text-gray-500 font-bold px-1">{item.weightUnit}</span>
+                  <div className="w-40 flex items-center border-b border-gray-200 pb-1 bg-green-50/30 px-3 rounded-t-lg">
+                    <Package size={16} className="text-green-700 shrink-0" />
+                    <input type="number" min="0.1" step="0.1" value={item.weight} onChange={(e) => handleItemChange(item.id, 'weight', e.target.value)} className={`w-full p-2 text-sm text-right outline-none font-bold text-gray-800 bg-transparent ${errors.items?.[index]?.weight ? 'text-red-500 placeholder-red-300' : ''}`} placeholder="Weight" />
+                    <span className="text-[10px] text-gray-500 font-bold ml-1">{item.weightUnit}</span>
                   </div>
                   
-                  <button type="button" onClick={() => handleRemoveItem(item.id)} disabled={items.length === 1} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-30">
-                    <Trash2 size={16} />
+                  <button type="button" onClick={() => handleRemoveItem(item.id)} disabled={items.length === 1} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 ml-2">
+                    <Trash2 size={18} />
                   </button>
                 </div>
               ))}
             </div>
             
-            <button type="button" onClick={handleAddItem} className="mt-4 ml-7 flex items-center gap-1 text-sm font-bold text-green-700 hover:text-green-800 transition-colors">
+            <button type="button" onClick={handleAddItem} className="mt-6 ml-7 flex items-center gap-1.5 text-xs font-bold text-green-700 hover:text-green-800 transition-colors bg-green-50 px-4 py-2 rounded-lg">
               <Plus size={16} /> Add Item
             </button>
 
             {/* Payload Summary */}
-            <div className="mt-8 ml-7 bg-gray-50/50 rounded-lg p-6 flex items-center justify-between border border-gray-100">
-              <div className="flex items-center gap-4">
-                <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100"><Truck size={24} className="text-gray-700"/></div>
+            <div className="mt-10 ml-7 bg-gray-50/50 rounded-xl p-6 flex items-center justify-between border border-gray-100">
+              <div className="flex items-center gap-5">
+                <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100 text-gray-400"><Truck size={24}/></div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-gray-900 text-sm">Consolidated Net Payload</h3>
-                    <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                    <span className="text-[9px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 tracking-wider uppercase">
                       <CheckCircle2 size={10} /> Within Axle Limit
                     </span>
                   </div>
-                  <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Recommended Carrier Class: Rigid Body (Medium Heavy 4x2 / 6x2)</p>
+                  <p className="text-[10px] text-gray-400">Recommended Carrier Class: Rigid Body (Medium Heavy 4x2 / 6x2)</p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-8">
+              <div className="flex items-center gap-10">
                 <div className="text-right">
-                  <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">Total Gross Weight</p>
+                  <p className="text-[9px] uppercase font-bold text-gray-400 tracking-widest mb-1.5">Total Gross Weight</p>
                   <p className="text-xl font-bold text-gray-900">{totalWeight.toLocaleString()} kg</p>
                 </div>
-                <div className="text-right border-l border-gray-200 pl-8">
-                  <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">Fleet Rating Limit</p>
+                <div className="text-right border-l border-gray-200 pl-10">
+                  <p className="text-[9px] uppercase font-bold text-gray-400 tracking-widest mb-1.5">Fleet Rating Limit</p>
                   <p className="text-sm font-bold text-gray-900">5,000 kg</p>
                 </div>
                 <div className="w-32 pl-4">
-                  <div className="flex justify-between text-[10px] font-bold mb-1.5">
-                    <span className="text-gray-500 uppercase tracking-wider">Load</span>
+                  <div className="flex justify-between text-[9px] font-bold mb-2">
+                    <span className="text-gray-400 uppercase tracking-widest">Load</span>
                     <span className="text-green-700">{payloadPercentage}%</span>
                   </div>
                   <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-[#113b2e] rounded-full transition-all duration-500" style={{ width: `${payloadPercentage}%` }}></div>
+                    <div className="h-full bg-green-700 rounded-full transition-all duration-500" style={{ width: `${payloadPercentage}%` }}></div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <hr className="border-gray-100" />
+          <hr className="border-gray-50 border-t-2" />
 
           {/* Additional Info */}
-          <div>
+          <div className="p-8">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <History className="text-[#113b2e]" size={20} /> Additional Information
+                <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <History className="text-green-700" size={18} /> Additional Information
                 </h2>
-                <p className="text-xs text-gray-500 mt-1 pl-7">Handling protocols, security seals, and destination gate access</p>
+                <p className="text-[10px] text-gray-400 mt-1 pl-7">Handling protocols, security seals, and destination gate access</p>
               </div>
-              <span className="text-xs font-bold text-gray-400">Optional Directives</span>
+              <span className="text-[10px] font-bold text-gray-400 tracking-wider">Optional Directives</span>
             </div>
 
-            <div className="mb-4 pl-7">
-              <div className="flex justify-between items-end mb-2">
-                <label className="block text-sm font-bold text-gray-700">Special Handling & Gate Instructions</label>
+            <div className="mb-6 pl-7">
+              <div className="flex justify-between items-end mb-3">
+                <label className="block text-[11px] font-bold text-gray-700">Special Handling & Gate Instructions</label>
                 <span className="text-[10px] text-gray-400 font-medium">Max 500 characters</span>
               </div>
               <textarea 
-                rows="3"
+                rows="4"
                 value={formData.specialInstructions}
                 onChange={(e) => setFormData({...formData, specialInstructions: e.target.value})}
                 placeholder="Provide special handling, customs seal instructions, dock gate access requirements, or temperature restrictions (e.g., Do not double-stack tea cartons; Inspect Colombo Customs tamper seal serial COL-8891 upon arrival)..."
-                className="w-full p-4 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-[#113b2e] focus:border-[#113b2e] outline-none text-gray-600 bg-gray-50/30 placeholder-gray-300 resize-none"
+                className="w-full p-4 border border-gray-100 rounded-xl text-sm focus:ring-1 focus:ring-green-700 focus:border-green-700 outline-none text-gray-600 bg-gray-50/50 placeholder-gray-400 resize-none"
               ></textarea>
             </div>
 
-            <div className="pl-7 mt-6 flex items-center gap-4">
-              <p className="text-xs font-bold text-gray-600">Add Quick Directives:</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="pl-7 flex items-center gap-4">
+              <p className="text-[11px] font-bold text-gray-700">Add Quick Directives:</p>
+              <div className="flex flex-wrap gap-2.5">
                 {quickDirectives.map(dir => (
                   <button
                     key={dir}
                     type="button"
                     onClick={() => toggleDirective(dir)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                    className={`px-4 py-2 rounded-full text-[11px] font-bold transition-all border ${
                       formData.directives.includes(dir) 
-                      ? 'bg-gray-100 border-gray-300 text-gray-800' 
-                      : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50 hover:border-gray-200'
+                      ? 'bg-gray-100 border-gray-200 text-gray-800' 
+                      : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50'
                     }`}
                   >
                     {dir}
@@ -339,25 +379,27 @@ const CreateBookingView = ({ onBack }) => {
               </div>
             </div>
           </div>
-        </form>
-      </div>
 
-      {/* Footer - No sticky, scrolls naturally at the end of the content */}
-      <div className="bg-white border-t border-gray-200 p-4 mt-auto">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <p className="text-[10px] text-gray-400 font-bold tracking-wide flex items-center gap-1.5 uppercase">
-            <ShieldAlert size={14} className="text-green-600"/> Encrypted Master Data Record • SLA Verified • ISO-28000 Security Compliant
-          </p>
-          <div className="flex gap-4">
-            <button type="button" onClick={onBack} className="px-6 py-2.5 text-sm font-bold text-gray-900 hover:bg-gray-100 rounded-md transition-colors">Cancel</button>
-            <button type="button" className="px-6 py-2.5 bg-gray-100 rounded-md text-sm font-bold text-gray-700 hover:bg-gray-200 transition-colors flex items-center gap-2">
-              <Save size={16}/> Save Draft
-            </button>
-            <button type="submit" form="create-booking-form" className="px-6 py-2.5 bg-[#113b2e] rounded-md text-sm font-bold text-white hover:bg-[#0c2a21] transition-colors flex items-center gap-2 shadow-sm">
-              Submit Booking <Send size={16}/>
-            </button>
+          <hr className="border-gray-50 border-t-2 mt-4 mb-4" />
+
+          {/* Footer inside the card */}
+          <div className="px-8 pb-4 pt-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] text-gray-400 font-bold tracking-widest flex items-center gap-1.5 uppercase">
+                <ShieldAlert size={14} className="text-gray-400"/> Encrypted Master Data Record • SLA Verified • ISO-28000 Security Compliant
+              </p>
+              <div className="flex gap-4">
+                <button type="button" onClick={onBack} className="px-6 py-3 text-xs font-bold text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">Cancel</button>
+                <button type="button" className="px-6 py-3 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-2">
+                  <Save size={16}/> Save Draft
+                </button>
+                <button type="submit" className="px-8 py-3 bg-[#0d3b2e] rounded-lg text-xs font-bold text-white hover:bg-[#092a21] transition-colors flex items-center gap-2 shadow-sm">
+                  {editData ? 'Save Changes' : 'Submit Booking'} <Send size={16}/>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
@@ -369,8 +411,18 @@ const CreateBookingView = ({ onBack }) => {
 // ==========================================
 const StoreBookings = () => {
   const [isCreating, setIsCreating] = useState(false);
+  const [bookingToEdit, setBookingToEdit] = useState(null); 
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [activeTab, setActiveTab] = useState('milestones');
+
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All Statuses'); 
+  const [activeButtonFilter, setActiveButtonFilter] = useState('All'); 
+  
+  // Date filter states
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const bookings = [
     {
@@ -401,6 +453,7 @@ const StoreBookings = () => {
       to: 'Colombo Main Store (Peliyagoda)',
       cargo: 'Highlands Arabica Coffee & Cardamom (1,850 kg)',
       consignments: 1,
+      totalWeight: '1,850 kg',
       history: [
         { time: 'Oct 27, 09:00 AM IST', action: 'Booking Confirmed', by: 'Admin' }
       ]
@@ -414,6 +467,7 @@ const StoreBookings = () => {
       to: 'Kandy Regional Depot',
       cargo: 'Organic Coconut Oil & Desiccated Copra (3,200 kg)',
       consignments: 3,
+      totalWeight: '3,200 kg',
       history: [
         { time: 'Oct 28, 07:15 AM IST', action: 'Booking Created', by: 'Harshani' }
       ]
@@ -446,6 +500,42 @@ const StoreBookings = () => {
     }
   ];
 
+  // Modified Filtering Logic to include Button Filter and Date Filter
+  const filteredBookings = bookings.filter(booking => {
+    // 1. Search Filter
+    const matchesSearch = 
+      booking.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      booking.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      booking.to.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      booking.cargo.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // 2. Status Dropdown Filter
+    const matchesDropdownStatus = 
+      statusFilter === 'All Statuses' || booking.status === statusFilter;
+      
+    // 3. Status Button Filter
+    const matchesButtonStatus = 
+      activeButtonFilter === 'All' || booking.status === activeButtonFilter;
+
+    // 4. Date Filter
+    let matchesDate = true;
+    if (startDate || endDate) {
+      const datePart = booking.date.split(' - ')[0]; 
+      const bDate = new Date(datePart);
+      
+      if (startDate) {
+        const sDate = new Date(startDate);
+        if (bDate < sDate) matchesDate = false;
+      }
+      if (endDate) {
+        const eDate = new Date(endDate);
+        if (bDate > eDate) matchesDate = false;
+      }
+    }
+
+    return matchesSearch && matchesDropdownStatus && matchesButtonStatus && matchesDate;
+  });
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'In Transit': return 'bg-green-100 text-green-800';
@@ -457,34 +547,83 @@ const StoreBookings = () => {
   };
 
   const canEditOrCancel = (status) => status === 'Pending Approval' || status === 'Confirmed';
-  const requiresGoodsConfirmation = (status) => status === 'In Transit' || status === 'Arrived';
 
-  // Show Create Booking View
+  const handleEditClick = () => {
+    setBookingToEdit(selectedBooking);
+    setIsCreating(true);
+  };
+
+  const handleBackToList = () => {
+    setIsCreating(false);
+    setBookingToEdit(null);
+  };
+
+  // Export CSV Functionality
+  const handleExportCSV = () => {
+    const headers = ['Booking ID', 'Status', 'Type', 'Date', 'From', 'To', 'Cargo', 'Consignments', 'Total Weight'];
+    const rows = filteredBookings.map(b => [
+      b.id,
+      b.status,
+      b.type,
+      `"${b.date}"`,
+      `"${b.from}"`,
+      `"${b.to}"`,
+      `"${b.cargo}"`,
+      b.consignments,
+      b.totalWeight || 'N/A'
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'bookings_report.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadClick = () => {
+    alert("Downloading Booking Details...");
+  };
+
+  const handleCancelBookingClick = () => {
+    setSelectedBooking(null);
+  };
+
   if (isCreating) {
-    return <CreateBookingView onBack={() => setIsCreating(false)} />;
+    return <CreateBookingView onBack={handleBackToList} editData={bookingToEdit} />;
   }
 
-  // Show List View
+  // Calculate counts for the pill buttons dynamically based on filtered list or total list
+  const countAll = bookings.length;
+  const countInTransit = bookings.filter(b => b.status === 'In Transit').length;
+  const countConfirmed = bookings.filter(b => b.status === 'Confirmed').length;
+  const countPending = bookings.filter(b => b.status === 'Pending Approval').length;
+
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col bg-gray-50"> 
       
-      {/* Top Header */}
-      <div className="flex justify-between items-center bg-white p-6 border-b border-gray-200 shrink-0">
+      {/* Top Header - Removed the white card wrapper as requested */}
+      <div className="flex justify-between items-center p-6 bg-transparent shrink-0">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-gray-800">Bookings</h1>
           <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-medium">24 Active Orders</span>
         </div>
         <div className="flex gap-4">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer shadow-sm"
+          >
             <Download size={16} /> Export CSV
           </button>
-          <button onClick={() => setIsCreating(true)} className="flex items-center gap-2 px-4 py-2 bg-[#113b2e] text-white rounded-md text-sm font-medium hover:bg-[#0c2a21]">
+          <button onClick={() => { setBookingToEdit(null); setIsCreating(true); }} className="flex items-center gap-2 px-4 py-2 bg-[#113b2e] text-white rounded-md text-sm font-medium hover:bg-[#0c2a21]">
             <Plus size={16} /> New Booking
           </button>
         </div>
       </div>
 
-      <div className="flex p-6 gap-6 items-start"> 
+      <div className="flex px-6 pb-6 gap-6 items-start"> 
         
         {/* Left Column: List */}
         <div className="flex-1 min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -495,64 +634,124 @@ const StoreBookings = () => {
             </div>
             
             <div className="flex gap-2">
-               <button className="px-3 py-1 bg-[#113b2e] text-white text-xs rounded-full">All 24</button>
-               <button className="px-3 py-1 bg-gray-50 text-gray-600 text-xs rounded-full hover:bg-gray-100 border border-gray-200 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> In Transit 8</button>
-               <button className="px-3 py-1 bg-gray-50 text-gray-600 text-xs rounded-full hover:bg-gray-100 border border-gray-200 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Confirmed 10</button>
-               <button className="px-3 py-1 bg-gray-50 text-gray-600 text-xs rounded-full hover:bg-gray-100 border border-gray-200 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span> Pending 6</button>
+               <button 
+                  onClick={() => setActiveButtonFilter('All')} 
+                  className={`px-4 py-1.5 text-xs rounded-full font-medium transition-colors ${activeButtonFilter === 'All' ? 'bg-[#0f3c2c] text-white' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}
+               >
+                 All {countAll}
+               </button>
+               <button 
+                  onClick={() => setActiveButtonFilter('In Transit')} 
+                  className={`px-4 py-1.5 text-xs rounded-full border flex items-center gap-1.5 font-medium transition-colors ${activeButtonFilter === 'In Transit' ? 'bg-[#0f3c2c] text-white border-[#0f3c2c]' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}
+               >
+                 <span className={`w-1.5 h-1.5 rounded-full ${activeButtonFilter === 'In Transit' ? 'bg-green-400' : 'bg-green-500'}`}></span> In Transit {countInTransit}
+               </button>
+               <button 
+                  onClick={() => setActiveButtonFilter('Confirmed')} 
+                  className={`px-4 py-1.5 text-xs rounded-full border flex items-center gap-1.5 font-medium transition-colors ${activeButtonFilter === 'Confirmed' ? 'bg-[#0f3c2c] text-white border-[#0f3c2c]' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}
+               >
+                 <span className={`w-1.5 h-1.5 rounded-full ${activeButtonFilter === 'Confirmed' ? 'bg-gray-300' : 'bg-gray-400'}`}></span> Confirmed {countConfirmed}
+               </button>
+               <button 
+                  onClick={() => setActiveButtonFilter('Pending Approval')} 
+                  className={`px-4 py-1.5 text-xs rounded-full border flex items-center gap-1.5 font-medium transition-colors ${activeButtonFilter === 'Pending Approval' ? 'bg-[#0f3c2c] text-white border-[#0f3c2c]' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}
+               >
+                 <span className={`w-1.5 h-1.5 rounded-full ${activeButtonFilter === 'Pending Approval' ? 'bg-gray-300' : 'bg-gray-300'}`}></span> Pending {countPending}
+               </button>
             </div>
 
             <div className="flex gap-3 pt-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                <input type="text" placeholder="Search ID, destination, cargo..." className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#113b2e]" />
+                <input 
+                  type="text" 
+                  placeholder="Search ID, destination, cargo..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#113b2e]" 
+                />
               </div>
-              <select className="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white text-gray-700 outline-none">
-                <option>All Statuses</option>
+              
+              <select 
+                value={statusFilter}
+                onChange={(e) => {
+                   setStatusFilter(e.target.value);
+                   if (e.target.value !== 'All Statuses') setActiveButtonFilter('All');
+                }}
+                className="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white text-gray-700 outline-none"
+              >
+                <option value="All Statuses">All Statuses</option>
+                <option value="In Transit">In Transit</option>
+                <option value="Confirmed">Confirmed</option>
+                <option value="Pending Approval">Pending Approval</option>
+                <option value="Completed">Completed</option>
               </select>
-              <button className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white whitespace-nowrap">
-                Oct 24 - Oct 31 <Calendar size={14} />
-              </button>
+
+              {/* Working Calendar / Date Filter */}
+              <div className="flex items-center border border-gray-300 rounded-md bg-white overflow-hidden px-2 gap-1">
+                <input 
+                  type="date" 
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="py-1.5 text-xs text-gray-700 outline-none bg-transparent"
+                />
+                <span className="text-gray-400 text-xs">to</span>
+                <input 
+                  type="date" 
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="py-1.5 text-xs text-gray-700 outline-none bg-transparent"
+                />
+                <Calendar size={14} className="text-gray-400 ml-1" />
+              </div>
+
             </div>
           </div>
 
           <div>
-            {bookings.map((booking) => (
-              <div key={booking.id} onClick={() => setSelectedBooking(booking)} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-green-50/30' : ''}`}>
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="font-bold text-gray-900 text-sm">#{booking.id}</span>
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${getStatusColor(booking.status)} flex items-center gap-1`}>
-                       {booking.status === 'In Transit' && <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>}
-                       {booking.status}
-                    </span>
-                    <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                      <Clock size={12}/> {booking.date}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm text-gray-900 font-bold mb-1 truncate">
-                      <span className="truncate">{booking.from}</span>
-                      <ChevronRight size={14} className="text-gray-400 shrink-0" />
-                      <span className="truncate">{booking.to}</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                      <Package size={12}/>
-                      <span className="truncate max-w-[300px]">{booking.cargo}</span>
-                      <span className="whitespace-nowrap ml-2 font-medium bg-gray-50 px-2 py-0.5 rounded border border-gray-100">• {booking.consignments} Consignments</span>
+            {filteredBookings.length > 0 ? (
+              filteredBookings.map((booking) => (
+                <div key={booking.id} onClick={() => setSelectedBooking(booking)} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-green-50/30' : ''}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="font-bold text-gray-900 text-sm">#{booking.id}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${getStatusColor(booking.status)} flex items-center gap-1`}>
+                         {booking.status === 'In Transit' && <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>}
+                         {booking.status}
+                      </span>
+                      <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                        <Clock size={12}/> {booking.date}
+                      </span>
                     </div>
                   </div>
-                  <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white shrink-0">
-                    <ChevronRight size={16} />
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm text-gray-900 font-bold mb-1 truncate">
+                        <span className="truncate">{booking.from}</span>
+                        <ChevronRight size={14} className="text-gray-400 shrink-0" />
+                        <span className="truncate">{booking.to}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                        <Package size={12}/>
+                        <span className="truncate max-w-[300px]">{booking.cargo}</span>
+                        <span className="whitespace-nowrap ml-2 font-medium bg-gray-50 px-2 py-0.5 rounded border border-gray-100">• {booking.consignments} Consignments</span>
+                      </div>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white shrink-0">
+                      <ChevronRight size={16} />
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-gray-500 text-sm">
+                No bookings found matching your criteria.
               </div>
-            ))}
+            )}
             
             <div className="p-4 flex justify-between items-center text-xs text-gray-500">
-               <span>Showing <strong>5</strong> of <strong>24</strong> bookings</span>
+               <span>Showing <strong>{filteredBookings.length}</strong> of <strong>{bookings.length}</strong> bookings</span>
                <div className="flex items-center gap-1">
                   <button className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-gray-100"><ChevronRight size={14} className="rotate-180"/></button>
                   <button className="w-6 h-6 flex items-center justify-center rounded bg-[#113b2e] text-white font-bold">1</button>
@@ -574,7 +773,6 @@ const StoreBookings = () => {
                   <p className="text-xs text-gray-500 mt-1">Created on {selectedBooking.date.split(' - ')[0]} by <span className="font-bold text-gray-700">Dispatcher N. Perera</span></p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 border border-gray-200 rounded"><Download size={14}/></button>
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(selectedBooking.status)} flex items-center gap-1`}>
                     {selectedBooking.status === 'In Transit' && <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>}
                     {selectedBooking.status}
@@ -719,20 +917,34 @@ const StoreBookings = () => {
               </div>
             </div>
 
-            <div className="p-4 border-t border-gray-200 bg-gray-50/50 flex justify-between gap-3 shrink-0">
-               <button className="p-2 border border-gray-200 rounded bg-white text-gray-600 hover:bg-gray-50 shrink-0 shadow-sm"><Download size={18} /></button>
-               <div className="flex gap-3 flex-1 min-w-0">
-                  {!requiresGoodsConfirmation(selectedBooking.status) && (
-                    <>
-                      <button disabled={!canEditOrCancel(selectedBooking.status)} className={`flex-1 py-2 rounded-md text-sm font-bold border transition-colors ${canEditOrCancel(selectedBooking.status) ? 'border-gray-200 text-gray-700 bg-gray-100 hover:bg-gray-200' : 'border-gray-200 text-gray-400 bg-gray-50 hidden'}`}>Cancel Booking</button>
-                      <button disabled={!canEditOrCancel(selectedBooking.status)} className={`flex-1 py-2 rounded-md text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm ${canEditOrCancel(selectedBooking.status) ? 'bg-[#113b2e] border border-[#113b2e] text-white hover:bg-[#0c2a21]' : 'bg-gray-100 text-gray-400 hidden'}`}><Edit2 size={16} /> Edit Booking</button>
-                    </>
-                  )}
-                  {requiresGoodsConfirmation(selectedBooking.status) && (
-                    <button className="flex-1 py-2 rounded-md text-sm font-bold flex items-center justify-center gap-2 bg-[#113b2e] text-white shadow-sm hover:bg-[#0c2a21]"><PackageCheck size={16} /> Confirm Receipt</button>
-                  )}
-               </div>
+            <div className="p-4 border-t border-gray-200 bg-gray-50/50 flex items-center justify-end gap-3 shrink-0">
+               {/* 1. Download Button */}
+               <button 
+                  onClick={handleDownloadClick}
+                  className="w-10 h-10 flex items-center justify-center border border-gray-200 rounded-md bg-white text-gray-600 hover:bg-gray-50 shrink-0 shadow-sm"
+               >
+                  <Download size={16} />
+               </button>
+               
+               {/* 2. Cancel Button */}
+               <button 
+                  onClick={handleCancelBookingClick}
+                  disabled={!canEditOrCancel(selectedBooking.status)} 
+                  className={`px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${canEditOrCancel(selectedBooking.status) ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'}`}
+               >
+                  Cancel Booking
+               </button>
+               
+               {/* 3. Edit Button */}
+               <button 
+                  onClick={handleEditClick}
+                  disabled={!canEditOrCancel(selectedBooking.status)} 
+                  className={`px-6 py-2.5 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm ${canEditOrCancel(selectedBooking.status) ? 'bg-[#0f3c2c] text-white hover:bg-[#0a2e21]' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+               >
+                  <Edit2 size={16} /> Edit Booking
+               </button>
             </div>
+
           </div>
         )}
       </div>
