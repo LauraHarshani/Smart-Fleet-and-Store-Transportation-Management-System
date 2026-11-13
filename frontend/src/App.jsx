@@ -19,6 +19,7 @@ import BookingApprovalLog from './pages/admin/BookingApprovalLog';
 import StoreLayout from './layouts/StoreLayout';
 import StoreBookings from './pages/store/StoreBookings';
 import GoodsHandling from './pages/store/GoodsHandling';
+import GoodsConfirmation from './pages/store/GoodsConfirmation';
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
           <Route path='/store' element={<StoreLayout/>}>
             <Route path='bookings' element={<StoreBookings/>} />
             <Route path='goods-handling' element={<GoodsHandling/>} />
+            <Route path='goods-confirmation/:bookingId' element={<GoodsConfirmation/>} />
           </Route>
         </Route>
 
