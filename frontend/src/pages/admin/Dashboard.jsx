@@ -1,6 +1,7 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchDashboardData } from '../../services/dataService';
 import {
   Truck,
   Route,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 
 
-// MOCK DATA
+// මෝක් දත්ත
 
 const stats = [
   {
@@ -148,7 +149,7 @@ const recentBookings = [
   },
 ];
 
-// REUSABLE COMPONENTS
+// නැවත භාවිතා කළ හැකි කොමපොනට්‌ස්
 
 const Card = ({ children, className = "" }) => (
   <div
@@ -199,7 +200,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-// KPI CARDS
+// KPI කාඩ්‌ස්
 
 const StatCard = ({ item }) => {
   const Icon = item.icon;
@@ -231,7 +232,7 @@ const StatCard = ({ item }) => {
 
 // TRIP STATUS DONUT CHART
 
-const TripStatusChart = () => {
+const TripStatusChart = ({ tripStatus = [] }) => {
   const total = tripStatus.reduce(
     (sum, item) => sum + item.count,
     0
@@ -311,7 +312,7 @@ const TripStatusChart = () => {
 
 // VEHICLE UTILIZATION CHART
 
-const VehicleUtilizationChart = () => (
+const VehicleUtilizationChart = ({ utilization = [] }) => (
   <Card className="p-5 h-full">
     <CardHeading title="Vehicle Utilization" />
 
@@ -459,7 +460,7 @@ const LiveTrackingMap = () => (
 
 // UPCOMING TRIPS TABLE
 
-const UpcomingTrips = () => (
+const UpcomingTrips = ({ trips = [] }) => (
   <Card className="p-5 h-full">
     <CardHeading
       title="Upcoming Trips"
@@ -470,7 +471,7 @@ const UpcomingTrips = () => (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[430px]">
         <tbody>
-          {upcomingTrips.map((trip) => (
+          {trips.map((trip) => (
             <tr
               key={trip.id}
               className="border-t border-[#E2E8E0] hover:bg-[#FAFCFA]"
@@ -510,7 +511,7 @@ const UpcomingTrips = () => (
 
 // RECENT BOOKINGS TABLE
 
-const RecentBookings = () => {
+const RecentBookings = ({ bookings = [] }) => {
   const [openMenu, setOpenMenu] = useState(null);
 
   return (
@@ -537,7 +538,7 @@ const RecentBookings = () => {
           </thead>
 
           <tbody className="divide-y divide-[#E5EBE6]">
-            {recentBookings.map((booking) => (
+            {bookings.map((booking) => (
               <tr
                 key={booking.id}
                 className="hover:bg-[#FAFCFA] transition-colors"
@@ -656,6 +657,34 @@ const QuickActions = () => (
 // MAIN DASHBOARD
 
 const Dashboard = () => {
+  const [dashboardData, setDashboardData] = useState({
+    stats,
+    tripStatus,
+    utilization,
+    upcomingTrips,
+    recentBookings,
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    fetchDashboardData().then((data) => {
+      if (active && data) {
+        setDashboardData({
+          stats: data.stats ?? stats,
+          tripStatus: data.tripStatus ?? tripStatus,
+          utilization: data.utilization ?? utilization,
+          upcomingTrips: data.upcomingTrips ?? upcomingTrips,
+          recentBookings: data.recentBookings ?? recentBookings,
+        });
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const today = new Date().toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -680,26 +709,26 @@ const Dashboard = () => {
 
       {/* KPI CARDS */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3.5">
-        {stats.map((item) => (
+        {dashboardData.stats.map((item) => (
           <StatCard key={item.title} item={item} />
         ))}
       </section>
 
       {/* TRIP STATUS + UTILIZATION */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <TripStatusChart />
-        <VehicleUtilizationChart />
+        <TripStatusChart tripStatus={dashboardData.tripStatus} />
+        <VehicleUtilizationChart utilization={dashboardData.utilization} />
       </section>
 
       {/* LIVE TRACKING + UPCOMING TRIPS */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
         <LiveTrackingMap />
-        <UpcomingTrips />
+        <UpcomingTrips trips={dashboardData.upcomingTrips} />
       </section>
 
       {/* RECENT BOOKINGS + QUICK ACTIONS */}
       <section className="grid grid-cols-1 lg:grid-cols-[1.8fr_0.8fr] gap-3.5">
-        <RecentBookings />
+        <RecentBookings bookings={dashboardData.recentBookings} />
         <QuickActions />
       </section>
 
