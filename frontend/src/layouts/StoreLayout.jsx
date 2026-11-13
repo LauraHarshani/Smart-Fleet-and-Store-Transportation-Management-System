@@ -62,7 +62,12 @@ const StoreLayout = () => {
     .toUpperCase();
 
   // Current page title
-  const pageTitle = pageTitles[location.pathname] || "Store";
+  // const pageTitle = pageTitles[location.pathname] || "Store";
+  const pageTitle = location.pathname.startsWith(
+    "/store/goods-confirmation/"
+  )
+    ? "Goods Confirmation"
+    : pageTitles[location.pathname] || "Store";
 
   // Notification sample data
   const [notifications, setNotifications] = useState([
@@ -90,7 +95,16 @@ const StoreLayout = () => {
   ).length;
 
   // Check active navigation item
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+  if (path === "/store/goods-handling") {
+    return (
+      location.pathname === path ||
+      location.pathname.startsWith("/store/goods-confirmation/")
+    );
+  }
+
+  return location.pathname === path;
+};
 
   // Sign out
   const handleSignOut = () => {
