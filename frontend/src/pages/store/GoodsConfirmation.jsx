@@ -498,7 +498,6 @@ const GoodsConfirmation = () => {
               <AlertCircle size={17} className="shrink-0" />
               <p>
                 Actual handover quantities differ from requested quantities.
-                Please include an explanation in the handover note.
               </p>
             </div>
           )}
@@ -511,7 +510,6 @@ const GoodsConfirmation = () => {
               <AlertCircle size={17} className="shrink-0" />
               <p>
                 Received quantities differ from handed-over quantities.
-                Please include an explanation in the receipt note.
               </p>
             </div>
           )}
@@ -526,7 +524,6 @@ const GoodsConfirmation = () => {
         >
           Back
         </button>
-
         {/* Receiving arrival confirmation */}
         {isReceiving && currentStatus === "In Transit" && (
           <button
