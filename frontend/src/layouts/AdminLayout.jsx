@@ -101,9 +101,9 @@ const pageTitles = {
 const NavItem = ({ to, icon: Icon, label, active }) => (
     <Link 
         to={to} 
-        className={`flex items-center gap-3 px-4 py-2.5 mx-3 rounded-lg font-medium transition-all duration-200 ${
+        className={`flex items-center gap-3 px-4 py-2.5 mx-3 rounded-lg font-medium transition-colors ${
             active
-                ? 'border border-[#87d3b1] bg-[#dff5eb] text-[#0b3f34] shadow-[0_0_0_1px_rgba(15,169,121,0.18)]' 
+                ? 'bg-[#0fa979] text-white'
                 : 'text-gray-300 hover:bg-white/10 hover:text-white'
         }`}
     >

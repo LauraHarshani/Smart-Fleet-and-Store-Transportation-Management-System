@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Layers,
@@ -259,6 +259,10 @@ const GoodsHandling = () => {
   const [selectedRoute, setSelectedRoute] = useState("All Routes");
   const [selectedDate, setSelectedDate] = useState("");
 
+  // Pagination: display 8 bookings per page.
+  const [currentPage, setCurrentPage] = useState(1);
+  const bookingsPerPage = 8;
+
   const sendingCount = bookings.filter(
     (booking) =>
       booking.direction === "sending" && booking.status !== "Completed"
@@ -327,6 +331,17 @@ const GoodsHandling = () => {
     selectedRoute,
     selectedDate,
   ]);
+
+  // Return to the first page whenever the filters or selected tab change.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm, selectedStatus, selectedRoute, selectedDate]);
+
+  // Pagination calculations are based on the filtered results.
+  const totalPages = Math.ceil(filteredBookings.length / bookingsPerPage);
+  const startIndex = (currentPage - 1) * bookingsPerPage;
+  const endIndex = startIndex + bookingsPerPage;
+  const currentBookings = filteredBookings.slice(startIndex, endIndex);
 
   const handleViewBooking = (booking) => {
     navigate(`/store/goods-confirmation/${booking.id}`, {
@@ -489,8 +504,8 @@ const GoodsHandling = () => {
             </thead>
 
             <tbody>
-              {filteredBookings.length > 0 ? (
-                filteredBookings.map((booking) => (
+              {currentBookings.length > 0 ? (
+                currentBookings.map((booking) => (
                   <tr
                     key={booking.id}
                     className="border-b border-slate-200 text-sm transition hover:bg-slate-50/70"
@@ -549,10 +564,55 @@ const GoodsHandling = () => {
           </table>
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-xs text-gray-500">
-          <span>
-            Showing {filteredBookings.length} of {bookings.length} bookings
+        {/* Pagination */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+          <span className="text-xs text-gray-500">
+            Showing {filteredBookings.length === 0 ? 0 : startIndex + 1}
+            {" - "}
+            {Math.min(endIndex, filteredBookings.length)}
+            {" of "}
+            {filteredBookings.length} bookings
           </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+              disabled={currentPage === 1 || totalPages === 0}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Previous
+            </button>
+
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+              (page) => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={currentPage === page ? "page" : undefined}
+                  className={`h-9 min-w-9 rounded-lg px-3 text-sm font-semibold transition ${
+                    currentPage === page
+                      ? "bg-[#078A68] text-white"
+                      : "border border-slate-200 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {page}
+                </button>
+              )
+            )}
+
+            <button
+              type="button"
+              onClick={() =>
+                setCurrentPage((page) => Math.min(page + 1, totalPages))
+              }
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>
