@@ -28,7 +28,7 @@ const initialBookings = [
     vehicle: "VH-020",
     driver: "Minindu Rajapaksha",
     itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 8, requested: 10 },
+      { id: 1, name: "Ceylon Tea", inventory: 10, requested: 10 },
       { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
       { id: 3, name: "Sugar", inventory: 60, requested: 15 },
     ],
