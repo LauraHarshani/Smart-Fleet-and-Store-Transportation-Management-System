@@ -24,6 +24,7 @@ import StoreLayout from './layouts/StoreLayout';
 import StoreBookings from './pages/store/StoreBookings';
 import GoodsHandling from './pages/store/GoodsHandling';
 import GoodsConfirmation from './pages/store/GoodsConfirmation';
+import StoreProfile from './pages/store/StoreProfile'; 
 
 // Temporary page for sections that do not have a screen yet
 const PlaceholderPage = ({ title }) => (
@@ -69,6 +70,10 @@ function App() {
             <Route path="bookings" element={<StoreBookings />} />
             <Route path="goods-handling" element={<GoodsHandling />} />
             <Route path="goods-confirmation/:bookingId" element={<GoodsConfirmation />} />
+            {/* Store Profile route */}
+            <Route path="profile" element={<StoreProfile />} />
+            <Route path="schedule" element={<PlaceholderPage title="Store Schedule" />} />
+            <Route path="trip-progress" element={<PlaceholderPage title="Trip Progress" />} />
           </Route>
         </Route>
 
