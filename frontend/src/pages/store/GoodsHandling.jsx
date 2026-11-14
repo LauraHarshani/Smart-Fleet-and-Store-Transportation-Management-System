@@ -374,6 +374,7 @@ const GoodsHandling = () => {
           const isActive = activeTab === tab.id;
 
           let count = 0;
+          if (tab.id === "all") count = bookings.length;
           if (tab.id === "sending") count = sendingCount;
           if (tab.id === "receiving") count = receivingCount;
           if (tab.id === "completed") count = completedCount;
@@ -394,7 +395,7 @@ const GoodsHandling = () => {
             >
               <Icon size={20} strokeWidth={2} />
               <span>{tab.label}</span>
-              {tab.id !== "all" && <span>({count})</span>}
+              <span>({count})</span>
             </button>
           );
         })}
