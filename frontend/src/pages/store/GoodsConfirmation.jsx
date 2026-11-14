@@ -635,8 +635,7 @@ const GoodsConfirmation = () => {
         >
           Back
         </button>
-
-        {/* Only the receiving store can confirm arrival. */}
+        {/* Receiving arrival confirmation */}
         {isReceiving && currentStatus === "In Transit" && (
           <button
             type="button"
