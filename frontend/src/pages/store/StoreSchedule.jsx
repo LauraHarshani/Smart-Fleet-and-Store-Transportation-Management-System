@@ -96,11 +96,10 @@ const StoreSchedule = () => {
       )}
 
       {/* Header Section */}
-      <div className="flex justify-between items-start mt-2">
+      <div className="flex justify-between items-start mb-5">
         <div>
-          <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase mb-1">DEPOT OPERATIONS / SCHEDULE</p>
-          <h1 className="text-[26px] leading-tight font-bold text-[#173F35]">Store Schedule</h1>
-          <p className="text-sm text-gray-500 mt-1">Plan, allocate bays, and monitor inbound & outbound logistical time windows.</p>
+          <h1 className="text-[26px] font-bold tracking-tight text-gray-950">Store Schedule</h1>
+          <p className="mt-1 text-sm font-medium text-slate-500">Plan, allocate bays, and monitor inbound & outbound logistical time windows.</p>
         </div>
         <div className="flex gap-3">
           <button 

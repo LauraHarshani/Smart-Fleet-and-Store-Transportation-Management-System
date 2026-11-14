@@ -605,7 +605,7 @@ const StoreBookings = () => {
     <div className="flex flex-col bg-gray-50"> 
       
       {/* Top Header - Removed the white card wrapper as requested */}
-      <div className="flex justify-between items-start p-6 bg-transparent shrink-0">
+      <div className="flex justify-between items-start mb-10 shrink-0">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight text-gray-950">Manage Booking</h1>
           <p className="mt-1 text-sm font-medium text-slate-500">
