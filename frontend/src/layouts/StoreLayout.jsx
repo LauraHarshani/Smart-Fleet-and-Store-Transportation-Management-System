@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Outlet,
   Link,
@@ -88,11 +88,33 @@ const StoreLayout = () => {
   ]);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationPanelRef = useRef(null);
 
   // Count unread notifications
   const unreadCount = notifications.filter(
     (notification) => !notification.read
   ).length;
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (!notificationPanelRef.current?.contains(event.target)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setIsNotificationsOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isNotificationsOpen]);
 
   // Check active navigation item
   const isActive = (path) => {
@@ -240,7 +262,7 @@ const StoreLayout = () => {
           <div className="flex items-center gap-6">
 
             {/* Notifications */}
-            <div className="relative">
+            <div className="relative" ref={notificationPanelRef}>
 
               <button
                 type="button"
@@ -248,19 +270,26 @@ const StoreLayout = () => {
                   setIsNotificationsOpen((open) => !open)
                 }
                 className="relative rounded-lg p-2 text-gray-700 transition hover:bg-gray-100"
-                aria-label="Notifications"
+                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
                 aria-expanded={isNotificationsOpen}
+                aria-haspopup="dialog"
               >
                 <Bell size={23} />
 
                 {unreadCount > 0 && (
-                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
+                  <span className="absolute -right-0.5 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
                 )}
               </button>
 
               {/* Notification Dropdown */}
               {isNotificationsOpen && (
-                <div className="absolute right-0 top-full z-50 mt-3 w-[340px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                <div
+                  className="absolute right-0 top-full z-50 mt-3 w-[340px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+                  role="dialog"
+                  aria-label="Notifications"
+                >
 
                   {/* Dropdown Header */}
                   <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
