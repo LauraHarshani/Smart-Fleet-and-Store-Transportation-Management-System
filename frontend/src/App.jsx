@@ -26,6 +26,11 @@ import GoodsHandling from './pages/store/GoodsHandling';
 import GoodsConfirmation from './pages/store/GoodsConfirmation';
 import StoreProfile from './pages/store/StoreProfile'; 
 
+// NEW Store Pages 
+import StoreSchedule from './pages/store/StoreSchedule';
+import TripProgress from './pages/store/TripProgress';
+import NewBooking from './pages/store/NewBooking';
+
 // Temporary page for sections that do not have a screen yet
 const PlaceholderPage = ({ title }) => (
   <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
@@ -67,6 +72,13 @@ function App() {
         {/* Store routes */}
         <Route element={<AuthGuard allowedRoles={['Store Manager', 'Store Employee']} />}>
           <Route path="/store" element={<StoreLayout />}>
+            
+            <Route index element={<Navigate to="schedule" replace />} />
+            
+            <Route path="schedule" element={<StoreSchedule />} />
+            <Route path="trip-progress" element={<TripProgress />} />
+            <Route path="new-booking" element={<NewBooking />} />
+            
             <Route path="bookings" element={<StoreBookings />} />
             <Route path="goods-handling" element={<GoodsHandling />} />
             <Route path="goods-confirmation/:bookingId" element={<GoodsConfirmation />} />
