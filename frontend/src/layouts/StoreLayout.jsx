@@ -85,6 +85,41 @@ const StoreLayout = () => {
       time: "1 hour ago",
       read: false,
     },
+    {
+      id: 3,
+      title: "Booking approved",
+      message: "Your booking BK-257 has been approved.",
+      time: "2 hours ago",
+      read: false,
+    },
+    {
+      id: 4,
+      title: "Booking declined",
+      message: "Your booking BK-258 was declined. Check the booking details for more information.",
+      time: "3 hours ago",
+      read: false,
+    },
+    {
+      id: 5,
+      title: "Vehicle arrived",
+      message: "Vehicle VH-020 has arrived at your store.",
+      time: "4 hours ago",
+      read: false,
+    },
+    {
+      id: 6,
+      title: "Delivery delayed",
+      message: "Your delivery for booking BK-259 is delayed. Check trip progress for updates.",
+      time: "5 hours ago",
+      read: false,
+    },
+    {
+      id: 7,
+      title: "Booking completed",
+      message: "Your booking BK-260 has been completed.",
+      time: "Yesterday",
+      read: false,
+    },
   ]);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
