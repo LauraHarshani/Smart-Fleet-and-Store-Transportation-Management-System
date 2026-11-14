@@ -415,12 +415,10 @@ const StoreBookings = () => {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [activeTab, setActiveTab] = useState('milestones');
 
-  // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Statuses'); 
   const [activeButtonFilter, setActiveButtonFilter] = useState('All'); 
   
-  // Date filter states
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -430,6 +428,7 @@ const StoreBookings = () => {
       status: 'In Transit',
       type: 'Outbound',
       date: 'Oct 28, 2026 - 09:30 AM IST',
+      rawDate: '2026-10-28',
       from: 'Colombo Main Store (Peliyagoda)',
       to: 'Galle Coastal Staging',
       cargo: 'Pure Ceylon BOPF Tea (2,000 kg) & Spices (700 kg)',
@@ -449,6 +448,7 @@ const StoreBookings = () => {
       status: 'Confirmed',
       type: 'Inbound',
       date: 'Oct 28, 2026 - 02:00 PM IST',
+      rawDate: '2026-10-28',
       from: 'Kandy Regional Depot',
       to: 'Colombo Main Store (Peliyagoda)',
       cargo: 'Highlands Arabica Coffee & Cardamom (1,850 kg)',
@@ -463,6 +463,7 @@ const StoreBookings = () => {
       status: 'Pending Approval',
       type: 'Outbound',
       date: 'Oct 28, 2026 - 08:00 AM IST',
+      rawDate: '2026-10-28',
       from: 'Colombo Main Store',
       to: 'Kandy Regional Depot',
       cargo: 'Organic Coconut Oil & Desiccated Copra (3,200 kg)',
@@ -477,6 +478,7 @@ const StoreBookings = () => {
       status: 'In Transit',
       type: 'Inbound',
       date: 'Oct 29, 2026 - 11:15 AM IST',
+      rawDate: '2026-10-29',
       from: 'Galle Coastal Staging',
       to: 'Kandy Regional Depot',
       cargo: 'Cinnamon Quills Alba Grade (1,400 kg)',
@@ -490,6 +492,7 @@ const StoreBookings = () => {
       status: 'Completed',
       type: 'Inbound',
       date: 'Oct 30, 2026 - 04:30 PM IST',
+      rawDate: '2026-10-30',
       from: 'Kandy Regional Depot',
       to: 'Colombo Main Store',
       cargo: 'General Ambient FMCG Provisions (4,100 kg)',
@@ -500,29 +503,22 @@ const StoreBookings = () => {
     }
   ];
 
-  // Modified Filtering Logic to include Button Filter and Date Filter
   const filteredBookings = bookings.filter(booking => {
-    // 1. Search Filter
     const matchesSearch = 
       booking.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.to.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.cargo.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // 2. Status Dropdown Filter
     const matchesDropdownStatus = 
       statusFilter === 'All Statuses' || booking.status === statusFilter;
       
-    // 3. Status Button Filter
     const matchesButtonStatus = 
       activeButtonFilter === 'All' || booking.status === activeButtonFilter;
 
-    // 4. Date Filter
     let matchesDate = true;
     if (startDate || endDate) {
-      const datePart = booking.date.split(' - ')[0]; 
-      const bDate = new Date(datePart);
-      
+      const bDate = new Date(booking.rawDate);
       if (startDate) {
         const sDate = new Date(startDate);
         if (bDate < sDate) matchesDate = false;
@@ -558,7 +554,6 @@ const StoreBookings = () => {
     setBookingToEdit(null);
   };
 
-  // Export CSV Functionality
   const handleExportCSV = () => {
     const headers = ['Booking ID', 'Status', 'Type', 'Date', 'From', 'To', 'Cargo', 'Consignments', 'Total Weight'];
     const rows = filteredBookings.map(b => [
@@ -595,7 +590,6 @@ const StoreBookings = () => {
     return <CreateBookingView onBack={handleBackToList} editData={bookingToEdit} />;
   }
 
-  // Calculate counts for the pill buttons dynamically based on filtered list or total list
   const countAll = bookings.length;
   const countInTransit = bookings.filter(b => b.status === 'In Transit').length;
   const countConfirmed = bookings.filter(b => b.status === 'Confirmed').length;
@@ -604,8 +598,8 @@ const StoreBookings = () => {
   return (
     <div className="flex flex-col bg-gray-50"> 
       
-      {/* Top Header - Removed the white card wrapper as requested */}
-      <div className="flex justify-between items-start mb-10 shrink-0">
+      {/* Top Header */}
+      <div className="flex justify-between items-start p-6 bg-transparent shrink-0">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight text-gray-950">Manage Booking</h1>
           <p className="mt-1 text-sm font-medium text-slate-500">
@@ -631,6 +625,7 @@ const StoreBookings = () => {
         {/* Left Column: List */}
         <div className="flex-1 min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-4 border-b border-gray-200 space-y-4 shrink-0">
+            
             <div className="flex gap-2">
                <button 
                   onClick={() => setActiveButtonFilter('All')} 
@@ -685,7 +680,6 @@ const StoreBookings = () => {
                 <option value="Completed">Completed</option>
               </select>
 
-              {/* Working Calendar / Date Filter */}
               <div className="flex items-center border border-gray-300 rounded-md bg-white overflow-hidden px-2 gap-1">
                 <input 
                   type="date" 
@@ -736,7 +730,8 @@ const StoreBookings = () => {
                         <span className="whitespace-nowrap ml-2 font-medium bg-gray-50 px-2 py-0.5 rounded border border-gray-100">• {booking.consignments} Consignments</span>
                       </div>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white shrink-0">
+                    {/* Light Green Arrow */}
+                    <div className="w-8 h-8 rounded-full bg-[#113b2e] flex items-center justify-center text-white shrink-0">
                       <ChevronRight size={16} />
                     </div>
                   </div>
