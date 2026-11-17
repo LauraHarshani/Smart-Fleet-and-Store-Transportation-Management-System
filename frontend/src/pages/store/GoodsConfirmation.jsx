@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Info,
+  Package,
 } from "lucide-react";
 
 import GoodsProgress from "../../components/goods/GoodsProgress";
@@ -62,6 +63,16 @@ const GoodsConfirmation = () => {
 
   const isReceiving = booking.direction === "receiving";
   const [currentStatus, setCurrentStatus] = useState(booking.status);
+  const goodsDetails = (booking.itemDetails || sampleBooking.itemDetails).map(
+    (item, index) => ({
+      id: item.id || index + 1,
+      name: item.name,
+      requested: Number(item.requested ?? 0),
+      dispatched: Number(
+        item.prepared ?? item.actual ?? item.handedOver ?? item.requested ?? 0
+      ),
+    })
+  );
 
   const initialStage = useMemo(() => {
     if (isReceiving) {
@@ -529,18 +540,57 @@ const GoodsConfirmation = () => {
         )}
 
         {isReceivingWaiting && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-6 text-center">
-            <Truck className="mx-auto mb-3 text-slate-400" size={30} />
-            <p className="text-sm font-semibold text-gray-800">
-              {currentStatus === "Awaiting Dispatch"
-                ? "Waiting for the sending store"
-                : "Waiting for the goods to arrive"}
-            </p>
-            <p className="mx-auto mt-1 max-w-[520px] text-sm text-slate-500">
-              {currentStatus === "Awaiting Dispatch"
-                ? "The sending store must dispatch the goods before you can confirm their arrival."
-                : "Once the goods physically arrive, select Confirm Goods Arrival to begin quantity verification."}
-            </p>
+          <div>
+            <div className="mb-6 flex items-center gap-3">
+              <Package size={21} className="text-[#078A68]" />
+              <h3 className="text-base font-semibold text-gray-900">
+                {currentStatus === "Awaiting Dispatch"
+                  ? "Goods Awaiting Dispatch"
+                  : "Goods In Transit"}
+              </h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[650px] border-collapse text-sm">
+                <thead>
+                  <tr className="h-12 bg-[#F0F4F1] text-gray-700">
+                    <th className="w-[10%] px-4 text-center font-medium">#</th>
+                    <th className="w-[30%] px-4 text-left font-medium">Item</th>
+                    <th
+                      className={`px-4 text-center font-medium ${
+                        currentStatus === "In Transit" ? "w-[30%]" : "w-[60%]"
+                      }`}
+                    >
+                      Requested Quantity
+                    </th>
+                    {currentStatus === "In Transit" && (
+                      <th className="w-[30%] px-4 text-center font-medium">
+                        Dispatched Quantity
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {goodsDetails.map((item, index) => (
+                    <tr
+                      key={item.id || index}
+                      className="h-[58px] border-b border-gray-200 text-gray-900"
+                    >
+                      <td className="px-4 text-center font-medium">
+                        {index + 1}
+                      </td>
+                      <td className="px-4 font-medium">{item.name}</td>
+                      <td className="px-4 text-center">{item.requested}</td>
+                      {currentStatus === "In Transit" && (
+                        <td className="px-4 text-center font-semibold">
+                          {item.dispatched}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
