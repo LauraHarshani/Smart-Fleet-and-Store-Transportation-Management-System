@@ -35,8 +35,18 @@ export default function Profile() {
   };
 
   // Get initials for avatar (e.g. "LH")
-  const getInitials = (fullName) => {
-    return fullName.split(' ').map(n => n[0]).join('').toUpperCase();
+  const getInitials = (name) => {
+    if (!name) return "";
+
+    const parts = name.trim().split(/\s+/);
+
+    if (parts.length === 1) {
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+
+    return (
+      parts[0][0] + parts[parts.length - 1][0]
+    ).toUpperCase();
   };
 
   return (
