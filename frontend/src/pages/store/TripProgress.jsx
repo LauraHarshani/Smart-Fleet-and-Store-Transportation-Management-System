@@ -91,11 +91,10 @@ const TripProgress = () => {
       )}
 
       {/* Header Section */}
-      <div className="flex justify-between items-start mt-2">
+      <div className="flex justify-between items-start mb-5">
         <div>
-          <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase mb-1">STORE OPERATIONS / TRIP PROGRESS</p>
-          <h1 className="text-[26px] leading-tight font-bold text-[#173F35]">Every arrival, in view.</h1>
-          <p className="text-sm text-gray-500 mt-1">Real-time telemetry precision GPS tracking, and receiving bay synchronization.</p>
+          <h1 className="text-[26px] font-bold tracking-tight text-gray-950">Every arrival, in view.</h1>
+          <p className="mt-1 text-sm font-medium text-slate-500">Real-time telemetry precision GPS tracking, and receiving bay synchronization.</p>
         </div>
         <div className="flex items-center gap-4">
            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full">

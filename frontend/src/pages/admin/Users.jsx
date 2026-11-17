@@ -97,9 +97,18 @@ export default function Users() {
   };
 
   const getInitials = (name) => {
-    if (!name) return '';
-    return name.split(' ').map((n) => n[0]).join('').toUpperCase();
-  };
+    if (!name) return "";
+
+    const parts = name.trim().split(/\s+/);
+
+    if (parts.length === 1) {
+        return parts[0].substring(0, 2).toUpperCase();
+    }
+
+    return (
+        parts[0][0] + parts[parts.length - 1][0]
+    ).toUpperCase();
+    };
 
   const openEditUser = (user) => {
       setEditingUser(user);
@@ -126,7 +135,7 @@ export default function Users() {
   const handleCreateUser = async (e) => {
       e.preventDefault();
       
-      if (!newUserName || !newUserEmail || !newUserRole || !newUserStore) {
+      if (!newUserName || !newUserEmail || !newUserRole || (newUserRole !== "ADMIN" && !newUserStore)) {
           alert('Please fill all required fields');
           return;
       }
@@ -149,7 +158,7 @@ export default function Users() {
   const handleEditUser = async (e) => {
       e.preventDefault();
       
-      if (!newUserName || !newUserEmail || !newUserRole || !newUserStore) {
+      if (!newUserName || !newUserEmail || !newUserRole || (newUserRole !== "ADMIN" && !newUserStore)) {
           alert('Please fill all required fields');
           return;
       }

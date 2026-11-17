@@ -28,7 +28,7 @@ const initialBookings = [
     vehicle: "VH-020",
     driver: "Minindu Rajapaksha",
     itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 8, requested: 10 },
+      { id: 1, name: "Ceylon Tea", inventory: 10, requested: 10 },
       { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
       { id: 3, name: "Sugar", inventory: 60, requested: 15 },
     ],
@@ -374,6 +374,7 @@ const GoodsHandling = () => {
           const isActive = activeTab === tab.id;
 
           let count = 0;
+          if (tab.id === "all") count = bookings.length;
           if (tab.id === "sending") count = sendingCount;
           if (tab.id === "receiving") count = receivingCount;
           if (tab.id === "completed") count = completedCount;
@@ -394,7 +395,7 @@ const GoodsHandling = () => {
             >
               <Icon size={20} strokeWidth={2} />
               <span>{tab.label}</span>
-              {tab.id !== "all" && <span>({count})</span>}
+              <span>({count})</span>
             </button>
           );
         })}
