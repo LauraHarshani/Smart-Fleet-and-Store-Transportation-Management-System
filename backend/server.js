@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
@@ -10,11 +11,21 @@ const storeRoutes = require("./routes/storeRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
 const itemRoutes = require("./routes/itemRoutes"); 
 
+const authRoutes = require("./routes/authRoutes")
+
 const app = express();
 
-// Middleware
-app.use(cors());
+//Middleware
+app.use(cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
+
+
+//Routes
+app.use("/api/auth", authRoutes)
 
 // Mount the routes to their respective base paths
 app.use("/api/users", userRoutes);
