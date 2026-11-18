@@ -1,0 +1,66 @@
+
+const jwt = require("jsonwebtoken");
+const AuthUser = require("../models/authUser");
+
+const protect = async (req, res, next) => {
+    try {
+        // Read JWT from HTTP-only cookie
+        const token = req.cookies?.token;
+
+        if (!token) {
+            return res.status(401).json({
+                success: false,
+                message: "Not authorized. Please log in."
+            });
+        }
+
+        // Verify JWT signature and expiration
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Find the user
+        const user = await AuthUser.findById(decoded.userId);
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: "User account not found"
+            });
+        }
+
+        // Check whether the account is still active
+        if (user.status !== "Active") {
+            return res.status(403).json({
+                success: false,
+                message: "Your account is inactive"
+            });
+        }
+
+        // Check whether this token has been invalidated
+        if (decoded.tokenVersion !== user.tokenVersion) {
+            return res.status(401).json({
+                success: false,
+                message: "Session expired. Please log in again."
+            });
+        }
+
+        // Attach authenticated user information to the request
+        req.user = {
+            userId: user._id.toString(),
+            id: user.id,
+            role: user.role,
+            store: user.store
+        };
+
+        next();
+
+    } catch (error) {
+        return res.status(401).json({
+            success: false,
+            message: "Invalid or expired session. Please log in again."
+        });
+    }
+};
+
+module.exports = {
+    protect,
+ };
