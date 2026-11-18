@@ -3,7 +3,13 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
-const connectDB =require("./config/db");
+const connectDB = require("./config/db");
+
+// Import the management routes
+const userRoutes = require("./routes/userRoutes");
+const storeRoutes = require("./routes/storeRoutes"); 
+const vehicleRoutes = require("./routes/vehicleRoutes");
+const itemRoutes = require("./routes/itemRoutes"); 
 
 const authRoutes = require("./routes/authRoutes")
 
@@ -21,11 +27,17 @@ app.use(cookieParser());
 //Routes
 app.use("/api/auth", authRoutes)
 
+// Mount the routes to their respective base paths
+app.use("/api/users", userRoutes);
+app.use("/api/stores", storeRoutes); 
+app.use("/api/vehicles", vehicleRoutes); 
+app.use("/api/items", itemRoutes);
+
 const PORT = process.env.PORT || 5000;
 
-//db connect
+// Connect to MongoDB
 connectDB();
 
-app.listen(PORT, ()=>{
+app.listen(PORT, () => {
     console.log(`Server is running on port: ${PORT}`);
-})
+});
