@@ -18,7 +18,7 @@ const protect = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         // Find the user
-        const user = await AuthUser.findById(decoded.userId);
+        const user = await AuthUser.findById(decoded.userId).select("+tokenVersion");
 
         if (!user) {
             return res.status(401).json({
@@ -50,6 +50,7 @@ const protect = async (req, res, next) => {
             role: user.role,
             store: user.store
         };
+        req.auth = { persistent: Boolean(decoded.persistent) };
 
         next();
 
