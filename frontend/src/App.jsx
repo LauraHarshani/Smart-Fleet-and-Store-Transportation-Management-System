@@ -30,6 +30,7 @@ import StoreProfile from './pages/store/StoreProfile';
 import StoreSchedule from './pages/store/StoreSchedule';
 import TripProgress from './pages/store/TripProgress';
 import NewBooking from './pages/store/NewBooking';
+import { AuthProvider } from './contexts/AuthContext';
 
 // Temporary page for sections that do not have a screen yet
 const PlaceholderPage = ({ title }) => (
@@ -43,6 +44,7 @@ const PlaceholderPage = ({ title }) => (
 
 function App() {
   return (
+    <AuthProvider>
     <Router>
       <Routes>
         {/* Default routes */}
@@ -84,8 +86,6 @@ function App() {
             <Route path="goods-confirmation/:bookingId" element={<GoodsConfirmation />} />
             {/* Store Profile route */}
             <Route path="profile" element={<StoreProfile />} />
-            <Route path="schedule" element={<PlaceholderPage title="Store Schedule" />} />
-            <Route path="trip-progress" element={<PlaceholderPage title="Trip Progress" />} />
           </Route>
         </Route>
 
@@ -93,6 +93,7 @@ function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
+    </AuthProvider>
   );
 }
 

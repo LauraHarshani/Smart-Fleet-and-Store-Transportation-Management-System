@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { randomBytes } = require("crypto");
+const bcrypt = require("bcryptjs");
 
 const authUserSchema = new mongoose.Schema({
 
@@ -57,16 +58,32 @@ const authUserSchema = new mongoose.Schema({
 
     password: {
         type: String,
-        required: true
+        required: true,
+        select: false
     },
 
-    isActive:{
+    tokenVersion: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+
+    status:{
         type: String,
         enum: ["Active","Inactive","On Leave"],
         default: "Active"
     }
 },{
     timestamps: true
+});
+
+// Hash the password before saving it to the database
+authUserSchema.pre("save", async function () {
+  if (!this.isModified("password") || !this.password) {
+    return;
+  }
+
+  this.password = await bcrypt.hash(this.password, 12);
 });
 
 module.exports = mongoose.model("authUsers", authUserSchema);

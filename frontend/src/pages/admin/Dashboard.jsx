@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Truck,
@@ -11,141 +11,16 @@ import {
   Store,
   MoreVertical,
 } from "lucide-react";
+import api from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
 
-
-// MOCK DATA
 
 const stats = [
-  {
-    title: "Active Vehicles",
-    value: "10",
-    description: "Currently on road",
-    icon: Truck,
-    iconColor: "text-[#07865F]",
-    iconBg: "bg-[#E2F4EC]",
-  },
-  {
-    title: "Today's Trips",
-    value: "26",
-    description: "Scheduled for today",
-    icon: Route,
-    iconColor: "text-[#2563EB]",
-    iconBg: "bg-[#E8F0FF]",
-  },
-  {
-    title: "Pending Bookings",
-    value: "12",
-    description: "Awaiting approval",
-    icon: CalendarCheck,
-    iconColor: "text-[#D97706]",
-    iconBg: "bg-[#FFF1DB]",
-  },
-  {
-    title: "Delayed Trips",
-    value: "02",
-    description: "Currently behind schedule",
-    icon: AlertTriangle,
-    iconColor: "text-[#DC2626]",
-    iconBg: "bg-[#FEECEC]",
-  },
-  {
-    title: "Completed Trips",
-    value: "08",
-    description: "Successfully completed",
-    icon: CircleCheck,
-    iconColor: "text-[#07865F]",
-    iconBg: "bg-[#E2F4EC]",
-  },
-];
-
-const tripStatus = [
-  { label: "Completed", count: 14, color: "#087653" },
-  { label: "In Progress", count: 6, color: "#B5D6A7" },
-  { label: "Pending", count: 4, color: "#FFB765" },
-  { label: "Delayed", count: 2, color: "#FF4848" },
-];
-
-const utilization = [
-  { label: "Week 1", value: 40 },
-  { label: "Week 2", value: 60 },
-  { label: "Week 3", value: 70 },
-  { label: "Week 4", value: 100 },
-];
-
-const upcomingTrips = [
-  {
-    id: "TR-159",
-    route: "Colombo → Kandy",
-    vehicle: "VH-020",
-    time: "10:00 AM",
-    status: "Scheduled",
-  },
-  {
-    id: "TR-160",
-    route: "Colombo → Galle",
-    vehicle: "VH-031",
-    time: "11:25 AM",
-    status: "Delayed",
-  },
-  {
-    id: "TR-152",
-    route: "Kandy → Galle",
-    vehicle: "VH-026",
-    time: "05:10 PM",
-    status: "Assigned",
-  },
-  {
-    id: "TR-151",
-    route: "Galle → Colombo",
-    vehicle: "VH-016",
-    time: "08:30 AM",
-    status: "In Progress",
-  },
-  {
-    id: "TR-150",
-    route: "Galle → Kandy",
-    vehicle: "VH-012",
-    time: "03:45 PM",
-    status: "Completed",
-  },
-];
-
-const recentBookings = [
-  {
-    id: "BK-10490",
-    store: "Colombo Store",
-    items: "85 Units",
-    date: "08 Nov 2026",
-    status: "Approved",
-  },
-  {
-    id: "BK-10489",
-    store: "Kandy Store",
-    items: "120 Units",
-    date: "08 Nov 2026",
-    status: "Cancelled",
-  },
-  {
-    id: "BK-10485",
-    store: "Galle Store",
-    items: "56 Units",
-    date: "15 Nov 2026",
-    status: "Rejected",
-  },
-  {
-    id: "BK-10482",
-    store: "Colombo Store",
-    items: "175 Units",
-    date: "16 Nov 2026",
-    status: "Pending",
-  },
-  {
-    id: "BK-10480",
-    store: "Kandy Store",
-    items: "36 Units",
-    date: "20 Nov 2026",
-    status: "Pending",
-  },
+  { title: "Active Vehicles", value: "—", description: "Currently on road", icon: Truck, iconColor: "text-[#07865F]", iconBg: "bg-[#E2F4EC]" },
+  { title: "Today's Trips", value: "—", description: "Scheduled for today", icon: Route, iconColor: "text-[#2563EB]", iconBg: "bg-[#E8F0FF]" },
+  { title: "Pending Bookings", value: "—", description: "Awaiting approval", icon: CalendarCheck, iconColor: "text-[#D97706]", iconBg: "bg-[#FFF1DB]" },
+  { title: "Delayed Trips", value: "—", description: "Currently behind schedule", icon: AlertTriangle, iconColor: "text-[#DC2626]", iconBg: "bg-[#FEECEC]" },
+  { title: "Completed Trips", value: "—", description: "Successfully completed", icon: CircleCheck, iconColor: "text-[#07865F]", iconBg: "bg-[#E2F4EC]" },
 ];
 
 // REUSABLE COMPONENTS
@@ -231,7 +106,7 @@ const StatCard = ({ item }) => {
 
 // TRIP STATUS DONUT CHART
 
-const TripStatusChart = () => {
+const TripStatusChart = ({ tripStatus }) => {
   const total = tripStatus.reduce(
     (sum, item) => sum + item.count,
     0
@@ -255,7 +130,7 @@ const TripStatusChart = () => {
       currentPercentage: 0,
       segments: [],
     }
-  ).segments.join(", ");
+  ).segments.join(", ") || "#E2E8F0 0% 100%";
 
   return (
     <Card className="p-5 h-full">
@@ -298,7 +173,7 @@ const TripStatusChart = () => {
               </span>
 
               <span className="text-xs text-[#64748B]">
-                ({((item.count/total)*100).toFixed(1)}%)
+              ({(total ? (item.count/total)*100 : 0).toFixed(1)}%)
               </span>
             </div>
           ))}
@@ -311,7 +186,7 @@ const TripStatusChart = () => {
 
 // VEHICLE UTILIZATION CHART
 
-const VehicleUtilizationChart = () => (
+const VehicleUtilizationChart = ({ utilization }) => (
   <Card className="p-5 h-full">
     <CardHeading title="Vehicle Utilization" />
 
@@ -459,7 +334,7 @@ const LiveTrackingMap = () => (
 
 // UPCOMING TRIPS TABLE
 
-const UpcomingTrips = () => (
+const UpcomingTrips = ({ upcomingTrips }) => (
   <Card className="p-5 h-full">
     <CardHeading
       title="Upcoming Trips"
@@ -494,7 +369,7 @@ const UpcomingTrips = () => (
               </td>
 
               <td className="py-2 px-2 text-[10px] text-[#475569] whitespace-nowrap">
-                {trip.time}
+                {trip.time || trip.start || "—"}
               </td>
 
               <td className="py-2 pl-2 pr-1 text-right">
@@ -510,7 +385,7 @@ const UpcomingTrips = () => (
 
 // RECENT BOOKINGS TABLE
 
-const RecentBookings = () => {
+const RecentBookings = ({ recentBookings }) => {
   const [openMenu, setOpenMenu] = useState(null);
 
   return (
@@ -547,11 +422,11 @@ const RecentBookings = () => {
                 </td>
 
                 <td className="px-3 py-3 text-[11px] text-[#718096] whitespace-nowrap">
-                  {booking.store}
+                  {booking.store || `${booking.pickupStore || "—"} → ${booking.destinationStore || "—"}`}
                 </td>
 
                 <td className="px-3 py-3 text-[11px] text-[#718096] whitespace-nowrap">
-                  {booking.items}
+                  {booking.items || (booking.totalItems != null ? `${booking.totalItems} items` : booking.priority || "—")}
                 </td>
 
                 <td className="px-3 py-3 text-[11px] text-[#718096] whitespace-nowrap">
@@ -656,11 +531,49 @@ const QuickActions = () => (
 // MAIN DASHBOARD
 
 const Dashboard = () => {
-  const today = new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  const { user } = useAuth();
+  const [dashboardData, setDashboardData] = useState({ stats, tripStatus: [], utilization: [], upcomingTrips: [], recentBookings: [] });
+
+  useEffect(() => {
+    let active = true;
+    const loadDashboard = async () => {
+      try {
+        const [kpiResponse, statusResponse, utilizationResponse, tripsResponse, bookingsResponse] = await Promise.all([
+          api.get('/admin/dashboard/kpis'),
+          api.get('/admin/dashboard/trip-status'),
+          api.get('/admin/dashboard/vehicle-utilization'),
+          api.get('/admin/dashboard/upcoming-trips'),
+          api.get('/admin/dashboard/recent-bookings'),
+        ]);
+        if (!active) return;
+
+        const kpis = kpiResponse.data.data;
+        const statusColors = { Completed: '#087653', 'In Progress': '#B5D6A7', Pending: '#FFB765', Delayed: '#FF4848', Scheduled: '#4F8FC0', Assigned: '#6B8E74', Draft: '#94A3B8' };
+        const weeklyValues = Array.from({ length: 4 }, (_, index) => {
+          const samples = utilizationResponse.data.data.map((vehicle) => vehicle.weeklyUtilization?.[index]?.utilization ?? 0);
+          return { label: `Week ${index + 1}`, value: samples.length ? Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length) : 0 };
+        });
+        const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+        setDashboardData({
+          stats: [
+            { ...stats[0], value: String(kpis.activeVehicles) },
+            { ...stats[1], value: String(kpis.todayTrips) },
+            { ...stats[2], value: String(kpis.pendingBookings) },
+            { ...stats[3], value: String(kpis.delayedTrips).padStart(2, '0') },
+            { ...stats[4], value: String(kpis.completedTrips).padStart(2, '0') },
+          ],
+          tripStatus: statusResponse.data.data.map((item) => ({ label: item.status, count: item.count, color: statusColors[item.status] || '#64748B' })),
+          utilization: weeklyValues,
+          upcomingTrips: tripsResponse.data.data.map((trip) => ({ ...trip, time: trip.start || formatDate(trip.date) })),
+          recentBookings: bookingsResponse.data.data.map((booking) => ({ ...booking, date: formatDate(booking.date) })),
+        });
+      } catch (error) {
+        console.error('Unable to load admin dashboard:', error);
+      }
+    };
+    loadDashboard();
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="space-y-5 pb-4">
@@ -673,33 +586,33 @@ const Dashboard = () => {
           </h2>
 
           <p className="text-sm text-[#64748B] mt-1">
-            Welcome back, Admin. Here's what's happening with your fleet today.
+            Welcome back, {user?.name || 'Admin'}. Here's what's happening with your fleet today.
           </p>
         </div>
       </section>
 
       {/* KPI CARDS */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3.5">
-        {stats.map((item) => (
+        {dashboardData.stats.map((item) => (
           <StatCard key={item.title} item={item} />
         ))}
       </section>
 
       {/* TRIP STATUS + UTILIZATION */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <TripStatusChart />
-        <VehicleUtilizationChart />
+        <TripStatusChart tripStatus={dashboardData.tripStatus} />
+        <VehicleUtilizationChart utilization={dashboardData.utilization} />
       </section>
 
       {/* LIVE TRACKING + UPCOMING TRIPS */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
         <LiveTrackingMap />
-        <UpcomingTrips />
+        <UpcomingTrips upcomingTrips={dashboardData.upcomingTrips} />
       </section>
 
       {/* RECENT BOOKINGS + QUICK ACTIONS */}
       <section className="grid grid-cols-1 lg:grid-cols-[1.8fr_0.8fr] gap-3.5">
-        <RecentBookings />
+        <RecentBookings recentBookings={dashboardData.recentBookings} />
         <QuickActions />
       </section>
 

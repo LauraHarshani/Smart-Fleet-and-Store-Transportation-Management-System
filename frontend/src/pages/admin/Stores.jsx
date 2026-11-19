@@ -1,61 +1,187 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Edit2, Trash2, Store as StoreIcon, MapPin, Clock, Shield, CheckCircle2, ArrowLeft, RotateCcw, Download, ChevronDown, Building2, Box, Truck, Maximize, Minus } from 'lucide-react';
+import { getAllStores, createStore, updateStore, deleteStore } from '../../services/storeService';
+
+const SRI_LANKA_DISTRICTS = [
+  'Colombo',
+  'Gampaha',
+  'Kalutara',
+  'Kandy',
+  'Matale',
+  'Nuwara Eliya',
+  'Galle',
+  'Matara',
+  'Hambantota',
+  'Jaffna',
+  'Kilinochchi',
+  'Mannar',
+  'Vavuniya',
+  'Mullaitivu',
+  'Batticaloa',
+  'Ampara',
+  'Trincomalee',
+  'Kurunegala',
+  'Puttalam',
+  'Anuradhapura',
+  'Polonnaruwa',
+  'Badulla',
+  'Monaragala',
+  'Ratnapura',
+  'Kegalle'
+];
+
+const DISTRICT_TO_PROVINCE = {
+  Colombo: 'Western Province',
+  Gampaha: 'Western Province',
+  Kalutara: 'Western Province',
+  Kandy: 'Central Province',
+  Matale: 'Central Province',
+  'Nuwara Eliya': 'Central Province',
+  Galle: 'Southern Province',
+  Matara: 'Southern Province',
+  Hambantota: 'Southern Province',
+  Jaffna: 'Northern Province',
+  Kilinochchi: 'Northern Province',
+  Mannar: 'Northern Province',
+  Vavuniya: 'Northern Province',
+  Mullaitivu: 'Northern Province',
+  Batticaloa: 'Eastern Province',
+  Ampara: 'Eastern Province',
+  Trincomalee: 'Eastern Province',
+  Kurunegala: 'North Western Province',
+  Puttalam: 'North Western Province',
+  Anuradhapura: 'North Central Province',
+  Polonnaruwa: 'North Central Province',
+  Badulla: 'Uva Province',
+  Monaragala: 'Uva Province',
+  Ratnapura: 'Sabaragamuwa Province',
+  Kegalle: 'Sabaragamuwa Province'
+};
+
+function SriLankaMapCanvas({ coordsText, labelText, zoomLevel = 100, heightClass = 'h-[280px]' }) {
+  const mapContainerRef = useRef(null);
+  const leafletMapRef = useRef(null);
+  const markerRef = useRef(null);
+
+  const parseLatLng = (raw) => {
+    if (!raw) return [7.8731, 80.7718];
+    const nums = String(raw).match(/-?\d+(\.\d+)?/g);
+    if (!nums || nums.length < 2) return [7.8731, 80.7718];
+    let lat = parseFloat(nums[0]);
+    let lng = parseFloat(nums[1]);
+    if (/S/i.test(raw) && lat > 0) lat = -lat;
+    if (/W/i.test(raw) && lng > 0) lng = -lng;
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return [7.8731, 80.7718];
+    return [lat, lng];
+  };
+
+  const [lat, lng] = parseLatLng(coordsText);
+
+  useEffect(() => {
+    let isMounted = true;
+    const initLeaflet = async () => {
+      try {
+        const L = await import('leaflet');
+        if (!isMounted || !mapContainerRef.current) return;
+
+        if (!leafletMapRef.current) {
+          const map = L.map(mapContainerRef.current, {
+            center: [lat, lng],
+            zoom: 8,
+            zoomControl: false,
+            attributionControl: false
+          });
+
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18
+          }).addTo(map);
+
+          const marker = L.circleMarker([lat, lng], {
+            radius: 9,
+            fillColor: '#0fa979',
+            color: '#113b2e',
+            weight: 3,
+            opacity: 1,
+            fillOpacity: 0.9
+          }).addTo(map);
+
+          if (labelText) {
+            marker.bindPopup(`<strong>${labelText}</strong><br/>${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`);
+          }
+
+          leafletMapRef.current = map;
+          markerRef.current = marker;
+        } else {
+          leafletMapRef.current.setView([lat, lng], 8);
+          if (markerRef.current) {
+            markerRef.current.setLatLng([lat, lng]);
+            if (labelText) {
+              markerRef.current.bindPopup(`<strong>${labelText}</strong><br/>${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`);
+            }
+          }
+        }
+      } catch (_) {
+        // Fallback visual Sri Lanka map renders below when leaflet is not installed
+      }
+    };
+
+    initLeaflet();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [lat, lng, labelText]);
+
+  useEffect(() => {
+    if (leafletMapRef.current) {
+      const zoomDelta = Math.round((zoomLevel - 100) / 20);
+      leafletMapRef.current.setZoom(Math.min(14, Math.max(6, 8 + zoomDelta)));
+    }
+  }, [zoomLevel]);
+
+  return (
+    <div className={`w-full ${heightClass} bg-[#e6f0ec] rounded-xl relative overflow-hidden border border-gray-200`}>
+      <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center justify-center transition-transform duration-300"
+        style={{ transform: `scale(${zoomLevel / 100})` }}
+      >
+        <svg
+          viewBox="0 0 260 420"
+          className="h-[86%] w-auto drop-shadow-sm opacity-90"
+          aria-label="Sri Lanka Map"
+        >
+          <path
+            d="M124 22 C136 28, 145 45, 148 66 C152 88, 168 104, 178 128 C188 152, 198 182, 194 214 C190 246, 174 276, 162 308 C150 340, 140 374, 122 396 C108 386, 98 364, 92 338 C86 312, 74 288, 66 260 C58 232, 54 198, 64 166 C74 134, 94 106, 102 74 C108 50, 112 28, 124 22 Z"
+            fill="#d1f4e0"
+            stroke="#113b2e"
+            strokeWidth="3"
+          />
+          <circle cx="130" cy="70" r="3" fill="#0d9468" />
+          <circle cx="145" cy="155" r="3" fill="#0d9468" />
+          <circle cx="135" cy="215" r="3.5" fill="#113b2e" />
+          <circle cx="88" cy="282" r="4" fill="#0fa979" />
+          <circle cx="102" cy="355" r="3.5" fill="#0fa979" />
+        </svg>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-3 left-3 bg-white/95 px-3 py-1.5 rounded-full shadow font-bold text-[10px] text-gray-800 flex items-center gap-1.5 z-10">
+        <span className="w-4 h-4 rounded-full bg-[#0d9468]/10 flex items-center justify-center">
+          <MapPin size={10} className="text-[#0d9468]" />
+        </span>
+        {labelText || 'Sri Lanka Logistics Grid'}
+      </div>
+
+      <div className="pointer-events-none absolute bottom-3 right-3 bg-[#113b2e] text-white px-3 py-1.5 rounded-full shadow-md font-bold text-[10px] tracking-wider flex items-center gap-1.5 z-10">
+        <span className="text-[#0fa979]">●</span> {lat.toFixed(4)}° N, {lng.toFixed(4)}° E
+      </div>
+    </div>
+  );
+}
 
 export default function Stores() {
-  const [stores, setStores] = useState([
-    { 
-      id: 'ST-CMB-01', 
-      name: 'Colombo Main Store', 
-      region: 'Western Province',
-      subRegion: '(Colombo & Gampaha Districts)', 
-      address: 'Primary Central Distribution & Cold Hub, Peliyagoda', 
-      coordinates: '6.9742° N, 79.8893° E', 
-      hours: '08:00 AM - 05:00 PM (Mon - Sat)', 
-      capacity: '24,000 MT', 
-      docks: '16 Active Docks',
-      utilization: 69, 
-      status: 'Active',
-      phone: '+94 11 234 5678',
-      rules: 'Max 2 trucks per hour / 45-min bay turnaround',
-      operationalClass: 'Highlands Agro & Cold Transit Depot',
-      operationalDetails: 'Tier-2 Cold storage certification with backup power integration.'
-    },
-    { 
-      id: 'ST-KND-02', 
-      name: 'Kandy Regional Depot', 
-      region: 'Central Province',
-      subRegion: '(Kandy District)', 
-      address: 'Central Highlands Transit & Agro Hub, Katugastota', 
-      coordinates: '7.3297° N, 80.6224° E', 
-      hours: '08:00 AM - 05:00 PM (Mon - Sat)', 
-      capacity: '12,500 MT', 
-      docks: '8 Active Docks', 
-      utilization: 45,
-      status: 'Operational',
-      phone: '+94 81 234 8840',
-      rules: 'Max 2 trucks per hour',
-      operationalClass: 'Highlands Agro & Cold Transit Depot',
-      operationalDetails: 'Tier-2 Cold storage certification with backup power integration.'
-    },
-    { 
-      id: 'ST-GAL-03', 
-      name: 'Galle Coastal Staging', 
-      region: 'Southern Province',
-      subRegion: '(Galle District)', 
-      address: 'Southern Maritime Corridor & Reefer Staging, Galle Port', 
-      coordinates: '6.0535° N, 80.2210° E', 
-      hours: '09:00 AM - 05:00 PM', 
-      capacity: '18,200 MT', 
-      docks: '10 Active Docks',
-      utilization: 85, 
-      status: 'Active',
-      phone: '+94 91 222 3344',
-      rules: 'Reefer priority scheduling',
-      operationalClass: 'Coastal Maritime Staging Depot',
-      operationalDetails: 'Tier-1 Port clearance staging with deep freeze capacity.'
-    },
-  ]);
-
+  const [stores, setStores] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [regionFilter, setRegionFilter] = useState('All Regions');
   const [capacityFilter, setCapacityFilter] = useState('Capacity');
@@ -73,6 +199,9 @@ export default function Stores() {
   const [hours, setHours] = useState('');
   const [rules, setRules] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [docks, setDocks] = useState('');
+  const [utilization, setUtilization] = useState(0);
+  const [storeStatus, setStoreStatus] = useState('Active');
   const [operationalClass, setOperationalClass] = useState('');
   const [operationalDetails, setOperationalDetails] = useState('');
 
@@ -81,30 +210,110 @@ export default function Stores() {
   const [councilApproval, setCouncilApproval] = useState(true);
   const [perimeterSecurity, setPerimeterSecurity] = useState(true);
 
-  const filteredStores = stores.filter(s => 
-    (s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    s.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.region.toLowerCase().includes(searchQuery.toLowerCase())) &&
-    (regionFilter === 'All Regions' || s.region === regionFilter) &&
-    (statusFilter === 'Status' || s.status === statusFilter)
-  );
+  useEffect(() => {
+    loadStores();
+  }, []);
 
-  const handleDelete = (id) => {
+  const loadStores = async () => {
+    try {
+      const data = await getAllStores();
+      setStores(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching stores:', error);
+      alert(error.response?.data?.message || 'Failed to load stores');
+    }
+  };
+
+  const parseCapacityNumber = (capStr) => {
+    if (!capStr) return 0;
+    const numeric = parseFloat(String(capStr).replace(/[^0-9.]/g, ''));
+    return Number.isNaN(numeric) ? 0 : numeric;
+  };
+
+  const getHubCode = (store) => {
+    if (!store) return 'LK-HUB';
+    const parts = (store.id || '').split('-');
+    if (parts.length >= 2 && parts[1]) {
+      return `LK-HUB-${parts[1]}`;
+    }
+    const cleanRegion = (store.region || 'HUB').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+    return `LK-HUB-${cleanRegion}`;
+  };
+
+  const getStoreManagerName = (store) => {
+    if (!store?.name) return 'Store In-Charge';
+    return `${store.name} Lead`;
+  };
+
+  const getStoreInitials = (store) => {
+    const label = store?.name || store?.id || 'ST';
+    const words = label.trim().split(/\s+/);
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return `${words[0][0] || ''}${words[words.length - 1][0] || ''}`.toUpperCase();
+  };
+
+  const formatUpdatedTime = (store) => {
+    const raw = store?.updatedAt || store?.createdAt;
+    if (!raw) return 'Not recorded yet';
+    const dt = new Date(raw);
+    if (Number.isNaN(dt.getTime())) return 'Not recorded yet';
+    return dt.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const filteredStores = stores.filter((s) => {
+    const matchesSearch =
+      (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.region || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.address || '').toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesRegion = regionFilter === 'All Regions' || s.region === regionFilter;
+    const matchesStatus = statusFilter === 'Status' || s.status === statusFilter;
+
+    const capVal = parseCapacityNumber(s.capacity);
+    const matchesCapacity =
+      capacityFilter === 'Capacity' ||
+      (capacityFilter === '<15000' && capVal < 15000) ||
+      (capacityFilter === '>15000' && capVal > 15000);
+
+    return matchesSearch && matchesRegion && matchesStatus && matchesCapacity;
+  });
+
+  const handleDelete = async (id) => {
+    if (!id) {
+      alert('Store ID not found');
+      return;
+    }
     if (window.confirm('Are you sure you want to delete this store facility?')) {
-      setStores(stores.filter(s => s.id !== id));
+      try {
+        await deleteStore(id);
+        setStores((prev) => prev.filter((s) => s.id !== id && s._id !== id));
+      } catch (error) {
+        console.error('Error deleting store:', error);
+        alert(error.response?.data?.message || 'Failed to delete store facility');
+      }
     }
   };
 
   const openEditStore = (store) => {
     setEditingStore(store);
-    setStoreName(store.name);
-    setDistrict(store.region);
-    setAddress(store.address);
-    setCoordinates(store.coordinates);
+    setStoreName(store.name || '');
+    setDistrict(store.region || '');
+    setAddress(store.address || '');
+    setCoordinates(store.coordinates || '');
     setPhone(store.phone || '');
-    setHours(store.hours);
+    setHours(store.hours || '');
     setRules(store.rules || '');
-    setCapacity(store.capacity);
+    setCapacity(store.capacity || '');
+    setDocks(store.docks || '');
+    setUtilization(Number(store.utilization) || 0);
+    setStoreStatus(store.status || 'Active');
     setOperationalClass(store.operationalClass || '');
     setOperationalDetails(store.operationalDetails || '');
     setFireClearance(true);
@@ -124,55 +333,97 @@ export default function Stores() {
     setHours('');
     setRules('');
     setCapacity('');
+    setDocks('');
+    setUtilization(0);
+    setStoreStatus('Active');
     setOperationalClass('');
     setOperationalDetails('');
     setZoomLevel(100);
   };
 
-  const handleCreateStore = (e) => {
+  const handleCreateStore = async (e) => {
     e.preventDefault();
     if (!storeName || !address || !coordinates) {
       alert('Please fill in required fields.');
       return;
     }
-    const newStore = {
-      id: `ST-NEW-0${stores.length + 1}`,
-      name: storeName,
-      region: district || 'Western Province',
-      subRegion: '',
-      address: address,
-      coordinates: coordinates,
-      hours: hours || '08:00 AM - 05:00 PM',
-      capacity: '10,000 MT',
-      docks: '4 Active Docks',
-      utilization: 0,
-      status: 'Active',
-      phone: phone,
-      rules: rules,
-      operationalClass: operationalClass || 'Standard Transit Depot',
-      operationalDetails: operationalDetails || 'Standard storage operations.'
+
+    const districtName = district || 'Colombo';
+    const provinceName = DISTRICT_TO_PROVINCE[districtName] || districtName;
+    const distCode = districtName.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'STR';
+    const generatedId = `ST-${distCode}-0${stores.length + 1}`;
+
+    const newStorePayload = {
+      id: generatedId,
+      name: storeName.trim(),
+      region: provinceName,
+      subRegion: `(${districtName} District)`,
+      address: address.trim(),
+      coordinates: coordinates.trim(),
+      hours: (hours || '08:00 AM - 05:00 PM').trim(),
+      capacity: (capacity || '10,000 MT').trim(),
+      docks: (docks || '4 Active Docks').trim(),
+      utilization: Number(utilization) || 0,
+      status: storeStatus || 'Active',
+      phone: (phone || '+94 11 000 0000').trim(),
+      rules: (rules || 'Standard dock scheduling').trim(),
+      operationalClass: (operationalClass || 'Standard Transit Depot').trim(),
+      operationalDetails: (operationalDetails || 'Standard storage operations.').trim()
     };
-    // Added to the end (bottom) of the list as requested
-    setStores([...stores, newStore]); 
-    closeView();
+
+    try {
+      const created = await createStore(newStorePayload);
+      setStores((prev) => [...prev, created]);
+      closeView();
+    } catch (error) {
+      console.error('Error creating store:', error);
+      alert(error.response?.data?.message || 'Error creating store');
+    }
   };
 
-  const handleUpdateStore = (e) => {
+  const handleUpdateStore = async (e) => {
     e.preventDefault();
-    const updatedStores = stores.map(s => 
-      s.id === editingStore.id 
-        ? { ...s, name: storeName, region: district, address: address, coordinates: coordinates, phone: phone, hours: hours, rules: rules, capacity: capacity, operationalClass: operationalClass, operationalDetails: operationalDetails }
-        : s
-    );
-    setStores(updatedStores);
-    closeView();
+    if (!editingStore) return;
+
+    const targetId = editingStore.id || editingStore._id;
+    const updatedPayload = {
+      name: storeName.trim(),
+      region: district || editingStore.region,
+      address: address.trim(),
+      coordinates: coordinates.trim(),
+      phone: phone.trim(),
+      hours: hours.trim(),
+      rules: rules.trim(),
+      capacity: capacity || editingStore.capacity,
+      docks: (docks || editingStore.docks || '4 Active Docks').trim(),
+      utilization: Number(utilization) || 0,
+      status: storeStatus || editingStore.status || 'Active',
+      operationalClass: operationalClass.trim(),
+      operationalDetails: operationalDetails.trim()
+    };
+
+    try {
+      const saved = await updateStore(targetId, updatedPayload);
+      setStores((prev) =>
+        prev.map((s) =>
+          (s._id && editingStore._id && s._id === editingStore._id) ||
+          (s.id && editingStore.id && s.id === editingStore.id)
+            ? { ...s, ...updatedPayload, ...saved }
+            : s
+        )
+      );
+      closeView();
+    } catch (error) {
+      console.error('Error updating store:', error);
+      alert(error.response?.data?.message || 'Error updating store');
+    }
   };
 
   const handleExportCSV = () => {
     const headers = ['Store ID', 'Store Name', 'Region', 'Address', 'Coordinates', 'Operating Hours', 'Capacity', 'Docks', 'Status'];
     const csvRows = filteredStores.map(store => {
       return [
-        store.id, `"${store.name}"`, `"${store.region} ${store.subRegion}"`, `"${store.address}"`, `"${store.coordinates}"`,
+        store.id, `"${store.name}"`, `"${store.region} ${store.subRegion || ''}"`, `"${store.address}"`, `"${store.coordinates}"`,
         `"${store.hours}"`, `"${store.capacity}"`, `"${store.docks}"`, store.status
       ].join(',');
     });
@@ -242,18 +493,19 @@ export default function Stores() {
               <div>
                 <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2">
                   <span>Administrative District <span className="text-red-500">*</span></span> 
-                  <span className="text-gray-400 font-normal">SL Province</span>
+                  <span className="text-gray-400 font-normal">SL Districts (25)</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><MapPin size={16} /></div>
                   <select 
                     value={district} onChange={(e) => setDistrict(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-lg text-xs text-gray-600 outline-none appearance-none"
+                    className="w-full pl-10 pr-10 py-3 bg-white border border-gray-100 rounded-lg text-xs text-gray-700 outline-none appearance-none cursor-pointer"
                     required
                   >
-                    <option value="">Select Western, Central or Southern District</option>
-                    <option value="Western Province">Western Province</option>
-                    <option value="Central Province">Central Province</option>
+                    <option value="">Select Sri Lanka District</option>
+                    {SRI_LANKA_DISTRICTS.map((dist) => (
+                      <option key={dist} value={dist}>{dist}</option>
+                    ))}
                   </select>
                   <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                 </div>
@@ -278,14 +530,15 @@ export default function Stores() {
               <div>
                 <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2">
                   <span>Coordinates (Latitude / Longitude)</span> 
-                  <span className="text-[#0fa979] font-bold flex items-center gap-1">Detect GPS</span>
+                  <span className="text-[#0fa979] font-bold flex items-center gap-1">Sri Lanka GPS</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><MapPin size={16} /></div>
                   <input 
                     type="text" value={coordinates} onChange={(e) => setCoordinates(e.target.value)}
-                    placeholder="e.g., 6.9742, 79.8893 (Colombo Central Grid)" 
+                    placeholder="e.g., 6.9742° N, 79.8893° E" 
                     className="w-full pl-10 pr-10 py-3 bg-white border border-gray-100 rounded-lg text-xs text-gray-600 outline-none focus:border-[#0fa979]"
+                    required
                   />
                   <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-[#0fa979]"><CheckCircle2 size={14} /></div>
                 </div>
@@ -359,31 +612,19 @@ export default function Stores() {
 
             <div className="mt-8 pt-4 border-t border-gray-100">
               <div className="flex justify-between items-center mb-4">
-                <span className="text-[11px] font-bold text-[#113b2e] flex items-center gap-1.5"><Shield size={14} className="text-[#0fa979]"/> Geofence & Dispatch Terminal Coordinates</span>
-                <span className="text-[10px] bg-[#f0f9f4] text-[#0d9468] px-2.5 py-1.5 rounded-md font-bold flex items-center gap-1 border border-[#0d9468]/10"><RotateCcw size={10} strokeWidth={3}/> Auto-detect from Postal Address</span>
+                <span className="text-[11px] font-bold text-[#113b2e] flex items-center gap-1.5"><Shield size={14} className="text-[#0fa979]"/> Sri Lanka Geofence & Dispatch Terminal Map</span>
+                <span className="text-[10px] bg-[#f0f9f4] text-[#0d9468] px-2.5 py-1.5 rounded-md font-bold flex items-center gap-1 border border-[#0d9468]/10"><RotateCcw size={10} strokeWidth={3}/> {district ? `${district} District` : 'Sri Lanka Coverage'}</span>
               </div>
-              <div className="w-full h-[280px] bg-[#e4dfd9] rounded-xl relative overflow-hidden border border-gray-200">
-                <div className="absolute inset-0 opacity-100 transition-transform duration-300" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1200&auto=format&fit=crop')`, backgroundSize: 'cover', backgroundPosition: 'center', transform: `scale(${zoomLevel / 100})` }}></div>
-                
-                <div className="absolute bottom-4 left-4 bg-white/95 px-3 py-2 rounded-full shadow font-bold text-[11px] text-gray-800 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#0d9468]/10 flex items-center justify-center"><MapPin size={12} className="text-[#0d9468]"/></span> Target Grid: Peliyagoda Logistic Zone
-                </div>
-                <div className="absolute bottom-4 right-4 bg-[#113b2e] text-white px-4 py-2 rounded-full shadow-md font-bold text-[10px] tracking-widest flex items-center gap-1.5">
-                  <span className="text-[#0fa979]">●</span> LAT: 6.9749° | LON: 79.8813°
-                </div>
-                
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                    <div className="w-16 h-16 bg-[#0fa979]/30 rounded-full flex items-center justify-center">
-                        <div className="w-8 h-8 bg-[#113b2e] rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-                           <StoreIcon size={14} className="text-white"/>
-                        </div>
-                    </div>
-                    <div className="mt-2 bg-[#113b2e] text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md whitespace-nowrap">
-                        <span className="text-[#0fa979] mr-1">●</span> LK-PELIYAGODA-WH01
-                    </div>
-                </div>
 
-                <div className="absolute top-4 right-4 flex flex-col gap-1.5">
+              <div className="relative">
+                <SriLankaMapCanvas
+                  coordsText={coordinates}
+                  labelText={storeName || (district ? `${district} Depot` : 'Sri Lanka Logistics Hub')}
+                  zoomLevel={zoomLevel}
+                  heightClass="h-[280px]"
+                />
+
+                <div className="absolute top-4 right-4 flex flex-col gap-1.5 z-10">
                    <button type="button" onClick={handleZoomIn} className="w-8 h-8 bg-white rounded flex items-center justify-center shadow text-gray-700 hover:bg-gray-50 border border-gray-100 cursor-pointer"><Plus size={16} strokeWidth={2.5}/></button>
                    <button type="button" onClick={handleZoomOut} className="w-8 h-8 bg-white rounded flex items-center justify-center shadow text-gray-700 hover:bg-gray-50 border border-gray-100 cursor-pointer"><Minus size={16} strokeWidth={2.5}/></button>
                    <button type="button" onClick={handleZoomReset} className="w-8 h-8 bg-white rounded flex items-center justify-center shadow text-gray-700 hover:bg-gray-50 border border-gray-100 cursor-pointer">
@@ -391,13 +632,14 @@ export default function Stores() {
                    </button>
                 </div>
               </div>
+
               <div className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-4 flex items-center gap-1.5">
                  <Shield size={12} className="text-gray-400"/> ENCRYPTED MASTER DATA RECORD • SRI LANKA NATIONAL LOGISTICS NETWORK
               </div>
             </div>
             
             <div className="flex justify-between items-center pt-8 mt-4 border-t border-gray-100">
-              <button type="button" onClick={() => { setStoreName(''); setAddress(''); setCoordinates(''); }} className="text-gray-500 text-xs font-bold flex items-center gap-1.5 hover:text-gray-700">
+              <button type="button" onClick={() => { setStoreName(''); setDistrict(''); setAddress(''); setCoordinates(''); setPhone(''); setHours(''); setRules(''); setCapacity(''); setDocks(''); setUtilization(0); setStoreStatus('Active'); setOperationalClass(''); setOperationalDetails(''); }} className="text-gray-500 text-xs font-bold flex items-center gap-1.5 hover:text-gray-700">
                 <RotateCcw size={14} strokeWidth={2} /> Reset Form
               </button>
               <div className="flex gap-3">
@@ -414,6 +656,13 @@ export default function Stores() {
   }
 
   if (currentView === 'edit' && editingStore) {
+    const activeHubCode = getHubCode(editingStore);
+    const totalCapNum = parseCapacityNumber(capacity || editingStore.capacity);
+    const utilPct = Number(utilization) || 0;
+    const usedCapNum = typeof editingStore.usedCapacityMT === 'number'
+      ? editingStore.usedCapacityMT
+      : Math.round((totalCapNum * utilPct) / 100);
+
     return (
       <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
         
@@ -429,7 +678,7 @@ export default function Stores() {
               <h1 className="text-[28px] font-extrabold text-[#113b2e] tracking-tight leading-none">Edit Store Details</h1>
               <span className="text-sm font-bold text-[#0fa979]">({editingStore.id})</span>
               <span className="bg-[#d1f4e0] text-[#0d9468] px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5">
-                 <span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> Operational & Active
+                 <span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> {storeStatus || editingStore.status || 'Active'}
               </span>
               <span className="bg-gray-200 text-gray-600 px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5">
                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.44l5.46-3.04"/></svg> Synchronized
@@ -446,7 +695,7 @@ export default function Stores() {
           <div className="lg:col-span-2 space-y-6">
             
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 relative">
-              <div className="absolute top-6 right-6 bg-gray-100 text-gray-400 font-bold text-[9px] uppercase tracking-widest px-2 py-1 rounded">LK-HUB-CEN</div>
+              <div className="absolute top-6 right-6 bg-gray-100 text-gray-400 font-bold text-[9px] uppercase tracking-widest px-2 py-1 rounded">{activeHubCode}</div>
               
               <h3 className="text-sm font-bold text-[#113b2e] mb-1 flex items-center gap-2">
                 <StoreIcon size={16} className="text-[#0fa979]" /> Store Identity & Location
@@ -467,7 +716,7 @@ export default function Stores() {
                          <span className="bg-gray-200 text-gray-500 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">LOCKED</span>
                       </div>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1.5 leading-tight">Immutable enterprise registry identifier for Kandy Central.</p>
+                    <p className="text-[10px] text-gray-400 mt-1.5 leading-tight">Immutable enterprise registry identifier for {storeName || editingStore.name}.</p>
                   </div>
 
                   <div>
@@ -484,13 +733,13 @@ export default function Stores() {
                     </label>
                     <div className="relative">
                       <select value={district} onChange={(e) => setDistrict(e.target.value)} className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 outline-none appearance-none">
-                        <option value="Central Province (Kandy District)">Central Province (Kandy District)</option>
-                        <option value="Western Province (Colombo)">Western Province (Colombo)</option>
-                        <option value="Southern Province (Galle)">Southern Province (Galle)</option>
+                        <option value="Western Province">Western Province</option>
+                        <option value="Central Province">Central Province</option>
+                        <option value="Southern Province">Southern Province</option>
                       </select>
                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                     </div>
-                    <p className="text-[10px] text-gray-500 mt-1.5 leading-tight">Assigned regional fleet zoning: Sector LK-C2.</p>
+                    <p className="text-[10px] text-gray-500 mt-1.5 leading-tight">Assigned regional fleet zoning: {district || editingStore.region}.</p>
                   </div>
 
                   <div>
@@ -498,12 +747,55 @@ export default function Stores() {
                       <span>Nominal Storage Capacity</span>
                     </label>
                     <div className="relative">
-                      <input type="text" value="500" readOnly className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-900 outline-none focus:border-[#0fa979]" />
+                      <input type="text" value={capacity} onChange={(e) => setCapacity(e.target.value)} className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-900 outline-none focus:border-[#0fa979]" />
                       <div className="absolute inset-y-0 right-2 flex items-center">
                          <span className="bg-[#d1f4e0] text-[#0d9468] text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">MT</span>
                       </div>
                     </div>
                     <p className="text-[10px] text-gray-500 mt-1.5 leading-tight">Certified dynamic static floor weight rating.</p>
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-[10px] font-bold text-gray-900 mb-1.5">
+                      <span>Active Loading Bays</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={docks}
+                      onChange={(e) => setDocks(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-900 outline-none focus:border-[#0fa979]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-[10px] font-bold text-gray-900 mb-1.5">
+                      <span>Storage Utilization (%)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={utilization}
+                      onChange={(e) => setUtilization(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-900 outline-none focus:border-[#0fa979]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-[10px] font-bold text-gray-900 mb-1.5">
+                      <span>Facility Status</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={storeStatus}
+                        onChange={(e) => setStoreStatus(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 outline-none appearance-none"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Operational">Operational</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
+                    </div>
                   </div>
                   
                   <div className="col-span-2">
@@ -551,16 +843,16 @@ export default function Stores() {
                   <div className="w-10 h-10 bg-[#113b2e] rounded-lg flex items-center justify-center text-white"><Truck size={20}/></div>
                   <div>
                     <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">LOADING BAYS</div>
-                    <div className="text-lg font-bold text-gray-900 leading-none mb-1">8 Active<br/>Docks</div>
-                    <div className="text-[9px] text-gray-500 leading-tight">Bays #1-4 Heavy Trailer /<br/>#5-8 Box Van</div>
+                    <div className="text-lg font-bold text-gray-900 leading-none mb-1">{docks || editingStore.docks || '0 Active Docks'}</div>
+                    <div className="text-[9px] text-gray-500 leading-tight">{rules || editingStore.rules || 'No slot rule set'}</div>
                   </div>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center gap-4">
                   <div className="w-10 h-10 bg-[#113b2e] rounded-lg flex items-center justify-center text-white"><Clock size={20}/></div>
                   <div>
                     <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">DISPATCH WINDOW</div>
-                    <div className="text-sm font-bold text-gray-900 leading-tight mb-1">06:00 - 22:00 IST</div>
-                    <div className="text-[9px] text-gray-500 leading-tight">Daily Transit Window (16h<br/>Shift)</div>
+                    <div className="text-sm font-bold text-gray-900 leading-tight mb-1">{hours || editingStore.hours || 'Not set'}</div>
+                    <div className="text-[9px] text-gray-500 leading-tight">{storeStatus || editingStore.status || 'Active'} Window</div>
                   </div>
                 </div>
               </div>
@@ -571,15 +863,15 @@ export default function Stores() {
                      <Box size={12} className="text-[#0fa979]"/> Current Storage Utilization
                    </div>
                    <div className="text-[10px] font-bold text-gray-900">
-                     340 MT / 500 MT (68.0%)
+                     {usedCapNum.toLocaleString()} MT / {totalCapNum.toLocaleString()} MT ({utilPct}%)
                    </div>
                 </div>
                 <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
-                   <div className="h-full bg-[#113b2e] rounded-full w-[68%]"></div>
+                   <div className="h-full bg-[#113b2e] rounded-full" style={{ width: `${Math.min(100, Math.max(0, utilPct))}%` }}></div>
                 </div>
                 <div className="flex justify-between items-center text-[9px]">
-                   <span className="text-gray-500">Buffer Margin: 160 MT Reserve Capacity Available</span>
-                   <span className="text-[#0d9468] font-bold flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-[#0fa979]"></span> Optimal Zone</span>
+                   <span className="text-gray-500">Utilization Rate: {utilPct}% Active Allocation</span>
+                   <span className="text-[#0d9468] font-bold flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-[#0fa979]"></span> {storeStatus || editingStore.status || 'Active'}</span>
                 </div>
               </div>
 
@@ -599,8 +891,8 @@ export default function Stores() {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="text-[11px] font-bold text-gray-900 mb-0.5">Fire Safety Clearance</div>
-                    <div className="text-[9px] text-gray-500 leading-tight mb-1.5">Certified by Kandy<br/>Municipal Council &<br/>Central Fire Services<br/>through Dec 2026.</div>
-                    <div className="text-[9px] text-[#0d9468] font-bold flex items-center gap-1"><CheckCircle2 size={10}/> Audited 12 Jan 2026</div>
+                    <div className="text-[9px] text-gray-500 leading-tight mb-1.5">Certified municipal fire<br/>compliance for<br/>{storeName || editingStore.name}.</div>
+                    <div className="text-[9px] text-[#0d9468] font-bold flex items-center gap-1"><CheckCircle2 size={10}/> {fireClearance ? 'Cleared' : 'Pending'}</div>
                   </div>
                   <div 
                     onClick={() => setFireClearance(!fireClearance)}
@@ -613,8 +905,8 @@ export default function Stores() {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="text-[11px] font-bold text-gray-900 mb-0.5">Local Council Approval</div>
-                    <div className="text-[9px] text-gray-500 leading-tight mb-1.5">Katugastota Pradeshiya<br/>Sabha commercial<br/>freight warehouse<br/>license active.</div>
-                    <div className="text-[9px] text-gray-400 font-bold flex items-center gap-1">↳ Lic. #KPS/FRT/8823</div>
+                    <div className="text-[9px] text-gray-500 leading-tight mb-1.5">Commercial hub license<br/>for {district || editingStore.region}.</div>
+                    <div className="text-[9px] text-gray-400 font-bold flex items-center gap-1">↳ {editingStore.id}</div>
                   </div>
                   <div 
                     onClick={() => setCouncilApproval(!councilApproval)}
@@ -627,8 +919,8 @@ export default function Stores() {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="text-[11px] font-bold text-gray-900 mb-0.5">Perimeter Security Active</div>
-                    <div className="text-[9px] text-gray-500 leading-tight mb-1.5">24/7 static perimeter<br/>security and<br/>monitored CCTV telemetry<br/>linked to<br/>Central Command.</div>
-                    <div className="text-[9px] text-[#0d9468] font-bold flex items-center gap-1"><Shield size={10}/> 16 IP Feeds Synchronized</div>
+                    <div className="text-[9px] text-gray-500 leading-tight mb-1.5">24/7 static perimeter<br/>security and monitored<br/>CCTV telemetry.</div>
+                    <div className="text-[9px] text-[#0d9468] font-bold flex items-center gap-1"><Shield size={10}/> {perimeterSecurity ? 'Synchronized' : 'Standby'}</div>
                   </div>
                   <div 
                     onClick={() => setPerimeterSecurity(!perimeterSecurity)}
@@ -642,7 +934,7 @@ export default function Stores() {
                    <CheckCircle2 size={14} className="text-[#0fa979] shrink-0 mt-0.5"/>
                    <div>
                      <div className="text-[10px] font-bold text-[#113b2e] mb-0.5">National Plant Quarantine & Agro Clearance</div>
-                     <div className="text-[9px] text-gray-600 leading-tight">Certified for Ceylon Spice & Tea Inland Staging.<br/>Periodic fumigation seal verified by Sri Lanka<br/>Export Development Board.</div>
+                     <div className="text-[9px] text-gray-600 leading-tight">{operationalDetails || 'Standard storage operations.'}</div>
                    </div>
                 </div>
 
@@ -658,14 +950,14 @@ export default function Stores() {
               
               <div className="flex justify-between items-center mb-4">
                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-[#113b2e] rounded-full flex items-center justify-center text-white text-[10px] font-bold">RJ</div>
+                    <div className="w-8 h-8 bg-[#113b2e] rounded-full flex items-center justify-center text-white text-[10px] font-bold">{getStoreInitials(editingStore)}</div>
                     <div>
-                      <div className="text-[11px] font-bold text-gray-900">Rohan Jayasuriya</div>
-                      <div className="text-[9px] text-gray-500">Depot Operations<br/>Manager</div>
+                      <div className="text-[11px] font-bold text-gray-900">{getStoreManagerName(editingStore)}</div>
+                      <div className="text-[9px] text-gray-500">{district || editingStore.region}</div>
                     </div>
                  </div>
                  <div className="flex items-center gap-1 text-[10px] text-gray-600 font-medium">
-                    <span className="text-gray-400">✆</span> +94 71 233<br/>8840
+                    <span className="text-gray-400">✆</span> {phone || editingStore.phone || 'N/A'}
                  </div>
               </div>
 
@@ -673,22 +965,18 @@ export default function Stores() {
                  <div className="flex items-center gap-1 font-bold text-gray-700">
                     <MapPin size={12} className="text-gray-400"/> Coordinates:
                  </div>
-                 <div className="font-extrabold text-gray-900">7.3297° N,<br/>80.6224° E</div>
-                 <div className="text-gray-400 text-right leading-tight">Katugastota<br/>Gateway</div>
+                 <div className="font-extrabold text-gray-900">{coordinates || editingStore.coordinates || 'N/A'}</div>
+                 <div className="text-gray-400 text-right leading-tight">{storeName || editingStore.name}</div>
               </div>
 
-              <div className="w-full h-[140px] bg-gray-100 rounded-xl relative overflow-hidden mb-3">
-                <div className="absolute inset-0 bg-cover bg-center opacity-80 transition-transform duration-300" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=600&auto=format&fit=crop')`, transform: `scale(${zoomLevel / 100})` }}></div>
-                <div className="absolute bottom-3 left-3 bg-white/95 px-2 py-1.5 rounded-lg shadow-sm font-bold text-[9px] text-gray-800 flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full bg-[#0d9468]/20 flex items-center justify-center"><MapPin size={8} className="text-[#0d9468]"/></span> 
-                  Katugastota Depot<br/>Geofence
-                </div>
-                <div className="absolute bottom-3 right-3 bg-[#d1f4e0]/90 text-[#0d9468] px-2 py-1.5 rounded-lg shadow-sm font-bold text-[9px] text-right">
-                  Radius 800m :<br/>ACTIVE
-                </div>
-              </div>
+              <SriLankaMapCanvas
+                coordsText={coordinates || editingStore.coordinates}
+                labelText={storeName || editingStore.name}
+                zoomLevel={zoomLevel}
+                heightClass="h-[140px]"
+              />
 
-              <div className="flex justify-between items-end text-[9px]">
+              <div className="flex justify-between items-end text-[9px] mt-3">
                  <div className="text-gray-500 leading-tight w-2/3">Auto-dispatch triggered upon perimeter<br/>crossing.</div>
                  <div className="text-[#0fa979] font-bold flex items-center gap-1 cursor-pointer">Recalibrate<br/>Mesh <ArrowLeft size={10} className="rotate-180"/></div>
               </div>
@@ -699,9 +987,9 @@ export default function Stores() {
         
         <div className="max-w-[1200px] mx-auto mt-6 bg-white border border-gray-100 rounded-xl shadow-sm p-4 flex justify-between items-center">
            <div className="flex items-center gap-4 text-[9px] text-gray-400 font-medium">
-             <div className="flex items-center gap-1"><span className="w-1 h-1 bg-[#0fa979] rounded-full"></span> Last synchronized by <span className="font-bold text-gray-700">Nuwan Perera</span> on 24 Feb 2025 at 09:15 IST</div>
+             <div className="flex items-center gap-1"><span className="w-1 h-1 bg-[#0fa979] rounded-full"></span> Last updated: <span className="font-bold text-gray-700">{formatUpdatedTime(editingStore)}</span></div>
              <div>•</div>
-             <div>Audit Hash: #0xKND6829F</div>
+             <div>Store ID: {editingStore.id}</div>
            </div>
            
            <div className="flex gap-4 items-center">
@@ -723,7 +1011,7 @@ export default function Stores() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-[#173F35]">Store Management</h1>
-            <span className="bg-[#d1f4e0] text-[#0d9468] px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide">3 Active Hubs</span>
+            <span className="bg-[#d1f4e0] text-[#0d9468] px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide">{stores.length} Active Hubs</span>
           </div>
           <p className="mt-1 text-sm text-[#64748B]">Central freight distribution depots, cold-chain hubs, and coastal maritime staging points across Sri Lanka.</p>
         </div>
@@ -745,7 +1033,7 @@ export default function Stores() {
           <div className="flex justify-between items-start mb-2">
             <div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">TOTAL STORES</div>
-              <div className="text-3xl font-extrabold text-gray-900 tracking-tight">3 Stores</div>
+              <div className="text-3xl font-extrabold text-gray-900 tracking-tight">{stores.length} Stores</div>
             </div>
             <div className="bg-gray-50 p-2.5 rounded-lg text-gray-400 border border-gray-100">
                <Building2 size={20} strokeWidth={2} />
@@ -754,8 +1042,8 @@ export default function Stores() {
           <div className="flex justify-between items-end mt-4">
              <div className="text-xs text-gray-500 font-medium w-1/2 leading-tight">Western, Central & Southern<br/>Corridors</div>
              <div className="text-[10px] text-[#0d9468] font-bold flex flex-col items-end leading-tight">
-               <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> +100%</div>
-               <span>Operational</span>
+               <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> {stores.length}</div>
+               <span>Registered</span>
              </div>
           </div>
         </div>
@@ -764,14 +1052,18 @@ export default function Stores() {
           <div className="flex justify-between items-start mb-2">
             <div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">TOTAL STORAGE CAPACITY</div>
-              <div className="text-3xl font-extrabold text-gray-900 tracking-tight">54,700 MT</div>
+              <div className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                {stores.reduce((sum, s) => sum + parseCapacityNumber(s.capacity), 0).toLocaleString()} MT
+              </div>
             </div>
             <div className="bg-gray-50 p-2.5 rounded-lg text-gray-400 border border-gray-100">
               <Box size={20} strokeWidth={2} />
             </div>
           </div>
           <div className="flex justify-between items-end mt-4">
-             <div className="text-xs text-gray-500 font-medium w-2/3 leading-tight">38,200 MT Current Utilization<br/>(69.8%)</div>
+             <div className="text-xs text-gray-500 font-medium w-2/3 leading-tight">
+               {stores.reduce((sum, s) => sum + (typeof s.usedCapacityMT === 'number' ? s.usedCapacityMT : Math.round((parseCapacityNumber(s.capacity) * (Number(s.utilization) || 0)) / 100)), 0).toLocaleString()} MT Current Utilization
+             </div>
              <div className="text-[10px] text-gray-400 font-bold flex flex-col items-end leading-tight">
                <span>Dry & Cold</span>
                <span>Storage</span>
@@ -783,14 +1075,18 @@ export default function Stores() {
           <div className="flex justify-between items-start mb-2">
             <div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">ACTIVE DOCK UTILIZATION</div>
-              <div className="text-3xl font-extrabold text-gray-900 tracking-tight">82.4%</div>
+              <div className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                {stores.length > 0 ? (stores.reduce((sum, s) => sum + (Number(s.utilization) || 0), 0) / stores.length).toFixed(1) : '0.0'}%
+              </div>
             </div>
             <div className="bg-gray-50 p-2.5 rounded-lg text-gray-400 border border-gray-100">
               <Truck size={20} strokeWidth={2} />
             </div>
           </div>
           <div className="flex justify-between items-end mt-4">
-             <div className="text-xs text-gray-500 font-medium w-2/3 leading-tight">28 of 34 Active Loading Bays<br/>in rotation</div>
+             <div className="text-xs text-gray-500 font-medium w-2/3 leading-tight">
+               {stores.reduce((sum, s) => sum + (parseInt(s.docks, 10) || 0), 0)} Active Loading Bays<br/>in rotation
+             </div>
              <div className="text-[10px] text-[#0d9468] font-bold flex items-center gap-1.5 leading-tight text-right">
                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
                <span>Nominal<br/>Flow</span>
@@ -879,9 +1175,9 @@ export default function Stores() {
               </tr>
             ) : (
               filteredStores.map((store) => (
-                <tr key={store.id} className="hover:bg-gray-50/50 transition-colors group">
+                <tr key={store._id || store.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="py-5 px-6">
-                    <span className="font-bold text-gray-700 bg-gray-100/80 px-2.5 py-1.5 rounded-lg text-xs tracking-wide">{store.id}</span>
+                    <span className="font-bold text-gray-700 bg-gray-100/80 px-2.5 py-1.5 rounded-lg text-xs tracking-wide">{store.id || store._id}</span>
                   </td>
                   <td className="py-5 px-6">
                     <div className="font-bold text-gray-900 text-sm mb-0.5">{store.name}</div>
@@ -902,7 +1198,7 @@ export default function Stores() {
                        <span className="text-gray-400 text-[10px] font-bold">{store.docks}</span>
                     </div>
                     <div className="w-[180px] h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                       <div className="h-full bg-[#0fa979] rounded-full" style={{ width: `${store.utilization}%` }}></div>
+                       <div className="h-full bg-[#0fa979] rounded-full" style={{ width: `${store.utilization || 0}%` }}></div>
                     </div>
                   </td>
                   <td className="py-5 px-6 text-center">
@@ -912,8 +1208,8 @@ export default function Stores() {
                   </td>
                   <td className="py-5 px-6 text-center">
                     <div className="flex justify-center gap-4 text-gray-400">
-                      <button onClick={() => openEditStore(store)} className="hover:text-[#113b2e] transition-colors"><Edit2 size={14} strokeWidth={2.5} /></button>
-                      <button onClick={() => handleDelete(store.id)} className="hover:text-red-500 transition-colors"><Trash2 size={14} strokeWidth={2.5} /></button>
+                      <button type="button" onClick={() => openEditStore(store)} className="hover:text-[#113b2e] transition-colors"><Edit2 size={14} strokeWidth={2.5} /></button>
+                      <button type="button" onClick={() => handleDelete(store.id || store._id)} className="hover:text-red-500 transition-colors"><Trash2 size={14} strokeWidth={2.5} /></button>
                     </div>
                   </td>
                 </tr>
@@ -936,9 +1232,9 @@ export default function Stores() {
           </div>
           
           <div className="flex items-center gap-3">
-             <button className="text-gray-300 hover:text-gray-500"><ArrowLeft size={14} strokeWidth={3}/></button>
-             <button className="w-7 h-7 bg-[#113b2e] text-white rounded-md flex items-center justify-center font-bold shadow-sm">1</button>
-             <button className="text-gray-300 hover:text-gray-500 rotate-180"><ArrowLeft size={14} strokeWidth={3}/></button>
+             <button type="button" className="text-gray-300 hover:text-gray-500"><ArrowLeft size={14} strokeWidth={3}/></button>
+             <button type="button" className="w-7 h-7 bg-[#113b2e] text-white rounded-md flex items-center justify-center font-bold shadow-sm">1</button>
+             <button type="button" className="text-gray-300 hover:text-gray-500 rotate-180"><ArrowLeft size={14} strokeWidth={3}/></button>
           </div>
         </div>
       </div>
