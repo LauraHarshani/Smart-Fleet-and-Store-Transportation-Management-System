@@ -18,6 +18,7 @@ import {
   Truck,
   Store,
 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
 // Page titles
 const pageTitles = {
@@ -46,11 +47,12 @@ const NavItem = ({ to, icon: Icon, label, active }) => (
 const StoreLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   // Get logged-in user information
-  const userName = localStorage.getItem("userName") || "Store User";
-  const userRole = localStorage.getItem("role") || "Store User";
-  const storeName = localStorage.getItem("storeName") || "Colombo Store";
+  const userName = user?.name || "Store User";
+  const userRole = user?.role || "Store User";
+  const storeName = user?.store || "Store";
 
   // Generate user initials
   const userInitials = userName
@@ -164,15 +166,10 @@ const StoreLayout = () => {
 };
 
   // Sign out
-  const handleSignOut = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("role");
-    localStorage.removeItem("userEmail");
-    localStorage.removeItem("userName");
-    localStorage.removeItem("storeName");
-
-    navigate("/login", { replace: true });
+  const handleSignOut = async () => {
+    try { await logout(); } finally {
+      navigate("/login", { replace: true });
+    }
   };
 
   // Mark one notification as read

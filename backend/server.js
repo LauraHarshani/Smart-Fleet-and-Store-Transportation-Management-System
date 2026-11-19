@@ -12,6 +12,8 @@ const vehicleRoutes = require("./routes/vehicleRoutes");
 const itemRoutes = require("./routes/itemRoutes"); 
 
 const authRoutes = require("./routes/authRoutes")
+//Admin paths
+const dashboardRoutes = require("./routes/dashboardRoutes")
 
 const app = express();
 
@@ -26,6 +28,8 @@ app.use(cookieParser());
 
 //Routes
 app.use("/api/auth", authRoutes)
+//Admin
+app.use("/api/admin/dashboard", dashboardRoutes);
 
 // Mount the routes to their respective base paths
 app.use("/api/users", userRoutes);

@@ -58,7 +58,14 @@ const authUserSchema = new mongoose.Schema({
 
     password: {
         type: String,
-        required: true
+        required: true,
+        select: false
+    },
+
+    tokenVersion: {
+      type: Number,
+      default: 0,
+      select: false,
     },
 
     status:{

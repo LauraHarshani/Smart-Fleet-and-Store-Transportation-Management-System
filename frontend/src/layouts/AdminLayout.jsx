@@ -6,6 +6,7 @@ import {
     LineChart, User, LogOut, Bell, X, Settings, Check, ShieldAlert,
     TruckIcon, ClipboardCheck, Snowflake, Radio
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const initialNotifications = [
     {
@@ -121,6 +122,7 @@ const NavCategory = ({ title }) => (
 const AdminLayout = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const { user, logout } = useAuth();
     const pageTitle = pageTitles[location.pathname] ?? '';
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [notifications, setNotifications] = useState(initialNotifications);
@@ -154,6 +156,10 @@ const AdminLayout = () => {
                 notification.id === id ? { ...notification, unread: false } : notification
             )
         );
+    };
+
+    const handleSignOut = async () => {
+        try { await logout(); } finally { navigate('/login', { replace: true }); }
     };
 
     // Helper function to check if the current path matches the link (for active state)
@@ -200,7 +206,7 @@ const AdminLayout = () => {
                     <NavItem to="/profile" icon={User} label="Profile" active={isActive('/profile')} />
                     <button
                         type="button"
-                        onClick={() => navigate('/login')}
+                        onClick={handleSignOut}
                         className="flex items-center gap-3 px-4 py-2.5 mx-3 w-[calc(100%-24px)] text-left rounded-lg font-medium text-gray-300 hover:bg-red-500/15 hover:text-red-300 transition-colors"
                     >
                         <LogOut size={20} />
@@ -231,11 +237,11 @@ const AdminLayout = () => {
                         
                         <div className="flex items-center gap-3 border-l pl-6 border-gray-200">
                             <div className="w-10 h-10 rounded-full bg-[#113b2e] flex items-center justify-center text-white font-semibold text-sm">
-                                AM
+                                {(user?.name || 'Admin').trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-sm font-bold text-gray-800 leading-tight">Admin</span>
-                                <span className="text-xs text-gray-500">Administrator</span>
+                                <span className="text-sm font-bold text-gray-800 leading-tight">{user?.name || 'Admin'}</span>
+                                <span className="text-xs text-gray-500">{user?.role || 'Administrator'}</span>
                             </div>
                         </div>
                     </div>
