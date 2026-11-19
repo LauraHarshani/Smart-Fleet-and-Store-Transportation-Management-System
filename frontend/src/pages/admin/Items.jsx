@@ -1,86 +1,28 @@
-import React, { useState, useRef } from 'react';
-import { Search, Plus, Edit2, Trash2, Box, FileText, CheckCircle2, ArrowLeft, RotateCcw, Download, ChevronDown, Package, Shield, AlertTriangle, Info, Camera, Leaf, Layers, Thermometer, Droplets, Wind, FileArchive, Activity, UploadCloud, Snowflake, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Edit2, Trash2, Box, CheckCircle2, ArrowLeft, RotateCcw, Download, ChevronDown, Shield, AlertTriangle, Camera, Leaf, Layers, Thermometer, Droplets, FileArchive, Activity, Snowflake, MapPin } from 'lucide-react';
+import { getAllItems, createItem, updateItem, deleteItem } from '../../services/itemService';
+
+const STATUS_STYLE_MAP = {
+  'Active': 'bg-[#d1f4e0]/60 text-[#0d9468]',
+  'Under Review': 'bg-gray-100 text-gray-500',
+  'Restricted': 'bg-red-50 text-red-600',
+  'Inactive': 'bg-gray-100 text-gray-500'
+};
+
+const getCategoryBadgeStyle = (cat = '') => {
+  const lower = cat.toLowerCase();
+  if (lower.includes('cold') || lower.includes('pharma') || lower.includes('fresh')) {
+    return 'bg-[#e8f8f2] text-[#0d9468] border-[#0fa979]/30';
+  }
+  if (lower.includes('chem') || lower.includes('hazmat')) {
+    return 'bg-red-50 text-red-600 border-red-200';
+  }
+  return 'bg-gray-100 text-gray-700 border-gray-200';
+};
 
 export default function Items() {
-  const [items, setItems] = useState([
-    {
-      id: 'ITM-1001',
-      name: 'Ceylon Black Tea (OP Grade)',
-      description: 'Premium bulk export grade, moisture-sealed multi-ply inner bag',
-      category: 'Dry Grocery / Export',
-      uom: '25kg Sacks',
-      weight: '25.0 kg',
-      status: 'Active',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468]',
-      categoryColor: 'bg-gray-100 text-gray-700 border-gray-200'
-    },
-    {
-      id: 'ITM-1042',
-      name: 'Frozen Tuna Loins (Yellowfin)',
-      description: 'Blast frozen -18°C cold-chain verified export quality pack',
-      category: 'Cold-Chain Perishables',
-      uom: 'Carton (10kg)',
-      weight: '10.5 kg',
-      status: 'Active',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468]',
-      categoryColor: 'bg-[#e8f8f2] text-[#0d9468] border-[#0fa979]/30'
-    },
-    {
-      id: 'ITM-2019',
-      name: 'Paracetamol 500mg Tablets (Carton)',
-      description: 'SLA health compliant pharmaceutical cargo, batch serial tracked',
-      category: 'Pharmaceuticals',
-      uom: 'Master Box (100 Blisters)',
-      weight: '4.2 kg',
-      status: 'Active',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468]',
-      categoryColor: 'bg-[#e8f8f2] text-[#0d9468] border-[#0fa979]/30'
-    },
-    {
-      id: 'ITM-2088',
-      name: 'Full Cream Milk Powder 1kg',
-      description: 'Ambient shelf-stable dairy inventory with foil barrier packaging',
-      category: 'Dairy & Ambient',
-      uom: 'Box (24 Packs)',
-      weight: '24.8 kg',
-      status: 'Under Review',
-      statusColor: 'bg-gray-100 text-gray-500',
-      categoryColor: 'bg-gray-100 text-gray-700 border-gray-200'
-    },
-    {
-      id: 'ITM-3051',
-      name: 'Organic Cinnamon Quills (C5 Extra)',
-      description: 'High value agricultural spice export, desiccated condition',
-      category: 'Agricultural Spices',
-      uom: 'Bale (50kg)',
-      weight: '50.0 kg',
-      status: 'Active',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468]',
-      categoryColor: 'bg-gray-100 text-gray-700 border-gray-200'
-    },
-    {
-      id: 'ITM-3110',
-      name: 'Industrial Sanitizer Drums (200L)',
-      description: 'UN-certified hazmat sealed container, Class 3 flammable liquids',
-      category: 'Chemicals / Hazmat',
-      uom: 'Drum (200 Litres)',
-      weight: '210.0 kg',
-      status: 'Restricted',
-      statusColor: 'bg-red-50 text-red-600',
-      categoryColor: 'bg-red-50 text-red-600 border-red-200'
-    },
-    {
-      id: 'ITM-4022',
-      name: 'Fresh Cavendish Bananas (Crate)',
-      description: 'Ethylene controlled temperature transport, ventilated carton box',
-      category: 'Fresh Produce',
-      uom: 'Crate (15kg)',
-      weight: '15.2 kg',
-      status: 'Active',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468]',
-      categoryColor: 'bg-[#e8f8f2] text-[#0d9468] border-[#0fa979]/30'
-    }
-  ]);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [currentView, setCurrentView] = useState('list');
   const [editingItem, setEditingItem] = useState(null);
@@ -89,6 +31,8 @@ export default function Items() {
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [uomFilter, setUomFilter] = useState('All UoMs');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Form States
   const [sku, setSku] = useState('');
@@ -96,8 +40,9 @@ export default function Items() {
   const [freightCat, setFreightCat] = useState('');
   const [uom, setUom] = useState('');
   const [grossWeight, setGrossWeight] = useState('');
+  const [itemStatus, setItemStatus] = useState('Active');
   const [itemImage, setItemImage] = useState(null);
-  
+
   // Toggles for Edit View
   const [stackable, setStackable] = useState(true);
   const [tempMonitor, setTempMonitor] = useState(false);
@@ -106,43 +51,130 @@ export default function Items() {
 
   const fileInputRef = useRef(null);
 
-  const filteredItems = items.filter(i => {
-    const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          i.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          i.description.toLowerCase().includes(searchQuery.toLowerCase());
+  useEffect(() => {
+    loadItemsData();
+  }, []);
+
+  const buildNextItemCode = (existingList = items) => {
+    const usedCodes = new Set(
+      (Array.isArray(existingList) ? existingList : []).map((it) =>
+        String(it.code || it.id || '').trim().toUpperCase()
+      )
+    );
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const candidate = `ITM-${Math.floor(1000 + Math.random() * 9000)}`;
+      if (!usedCodes.has(candidate)) return candidate;
+    }
+    return `ITM-${Date.now().toString().slice(-4)}`;
+  };
+
+  const normalizeItemRecord = (raw, idx = 0) => {
+    const codeText = raw.code || raw.id || `ITM-${1001 + idx}`;
+    const catText = raw.category || 'Dry Grocery / Export';
+    const uomText = raw.unitOfMeasure || raw.uom || 'Cartons / Cases (CTN)';
+    const weightNum = raw.weightKg !== undefined && raw.weightKg !== null
+      ? Number(raw.weightKg)
+      : parseFloat(String(raw.weight || '0').replace(/[^\d.]/g, '')) || 0;
+    const statusText = raw.status || 'Active';
+
+    return {
+      ...raw,
+      id: codeText,
+      code: codeText,
+      name: raw.name || '',
+      description: raw.description || 'Standard commercial catalog item',
+      category: catText,
+      uom: uomText,
+      weightKg: weightNum,
+      weight: `${weightNum.toFixed(1)} kg`,
+      status: statusText,
+      statusColor: STATUS_STYLE_MAP[statusText] || STATUS_STYLE_MAP['Active'],
+      categoryColor: getCategoryBadgeStyle(catText),
+      image: raw.image || null
+    };
+  };
+
+  const loadItemsData = async () => {
+    setLoading(true);
+    try {
+      const data = await getAllItems().catch((err) => {
+        console.error('getAllItems failed:', err);
+        return [];
+      });
+      setItems((Array.isArray(data) ? data : []).map(normalizeItemRecord));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredItems = items.filter((i) => {
+    const matchesSearch =
+      (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (i.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (i.description || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === 'All Categories' || i.category === categoryFilter;
-    const matchesUom = uomFilter === 'All UoMs' || i.uom.includes(uomFilter.replace('s', ''));
+    const matchesUom = uomFilter === 'All UoMs' || (i.uom || '').toLowerCase().includes(uomFilter.replace(/s$/i, '').toLowerCase());
     const matchesStatus = statusFilter === 'All Statuses' || i.status === statusFilter;
     return matchesSearch && matchesCategory && matchesUom && matchesStatus;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedItems = filteredItems.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
 
   const resetFilters = () => {
     setSearchQuery('');
     setCategoryFilter('All Categories');
     setUomFilter('All UoMs');
     setStatusFilter('All Statuses');
+    setCurrentPage(1);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (item) => {
+    const targetId = item.code || item.id || item._id;
+    if (!targetId) return;
     if (window.confirm('Are you sure you want to remove this catalog item?')) {
-      setItems(items.filter(i => i.id !== id));
+      try {
+        await deleteItem(targetId);
+        setItems((prev) => prev.filter((i) => (i._id || i.id) !== (item._id || item.id)));
+      } catch (error) {
+        alert(error.response?.data?.message || 'Failed to delete item');
+      }
     }
   };
 
   const openAddItem = () => {
-    setSku(''); setItemName(''); setFreightCat(''); setUom(''); setGrossWeight('');
+    setEditingItem(null);
+    setSku(buildNextItemCode(items));
+    setItemName('');
+    setFreightCat('');
+    setUom('');
+    setGrossWeight('');
+    setItemStatus('Active');
     setItemImage(null);
     setCurrentView('add');
   };
 
   const openEditItem = (item) => {
     setEditingItem(item);
-    setSku(item.id);
+    setSku(item.code || item.id);
     setItemName(item.name);
     setFreightCat(item.category);
     setUom(item.uom);
-    setGrossWeight(item.weight.replace(' kg', ''));
+    setGrossWeight(String(item.weightKg ?? String(item.weight || '').replace(/[^\d.]/g, '')));
+    setItemStatus(item.status || 'Active');
     setItemImage(item.image || null);
+    if (item.handlingConstraints) {
+      setStackable(Boolean(item.handlingConstraints.stackable));
+      setTempMonitor(Boolean(item.handlingConstraints.tempMonitor));
+      setMoisture(Boolean(item.handlingConstraints.moisture));
+      setFragile(Boolean(item.handlingConstraints.fragile));
+    } else {
+      setStackable(true);
+      setTempMonitor(item.category?.toLowerCase().includes('cold') || false);
+      setMoisture(true);
+      setFragile(false);
+    }
     setCurrentView('edit');
   };
 
@@ -151,42 +183,78 @@ export default function Items() {
     setEditingItem(null);
   };
 
-  const handleCreateItem = (e) => {
+  const handleCreateItem = async (e) => {
     e.preventDefault();
-    if (!sku || !itemName) {
-      alert('Please fill in required fields (Item Code and Name).');
+    const finalCode = (sku || buildNextItemCode(items)).trim().toUpperCase();
+    if (!itemName.trim() || !uom) {
+      alert('Please fill in required fields (Item Name and Unit of Measure).');
       return;
     }
-    const newItemObj = {
-      id: sku,
-      name: itemName,
-      description: 'Newly registered catalog item',
-      category: freightCat || 'Dry Grocery / Export',
-      uom: uom || 'Cartons / Cases (CTN)',
-      weight: `${grossWeight || '0.00'} kg`,
+
+    const weightVal = parseFloat(grossWeight) || 0;
+    const catVal = freightCat || 'Dry Grocery / Export';
+
+    const apiPayload = {
+      code: finalCode,
+      name: itemName.trim(),
+      description: `${catVal} — Standard freight catalog item`,
+      category: catVal,
+      unitOfMeasure: uom,
+      weightKg: weightVal,
+      isHazardous: catVal.toLowerCase().includes('hazmat') || catVal.toLowerCase().includes('chem'),
       status: 'Active',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468]',
-      categoryColor: 'bg-gray-100 text-gray-700 border-gray-200',
       image: itemImage
     };
-    setItems([...items, newItemObj]);
-    closeView();
+
+    try {
+      const created = await createItem(apiPayload);
+      setItems((prev) => [normalizeItemRecord(created), ...prev]);
+      closeView();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error creating item');
+    }
   };
 
-  const handleUpdateItem = (e) => {
+  const handleUpdateItem = async (e) => {
     e.preventDefault();
-    const updated = items.map(i => 
-      i.id === editingItem.id 
-        ? { ...i, name: itemName, category: freightCat, uom: uom, weight: `${grossWeight} kg`, image: itemImage }
-        : i
-    );
-    setItems(updated);
-    closeView();
+    if (!editingItem) return;
+
+    const targetId = editingItem.code || editingItem.id || editingItem._id;
+    const weightVal = parseFloat(grossWeight) || 0;
+
+    const apiUpdate = {
+      name: itemName.trim(),
+      category: freightCat,
+      unitOfMeasure: uom,
+      weightKg: weightVal,
+      status: itemStatus,
+      handlingConstraints: {
+        stackable,
+        tempMonitor,
+        moisture,
+        fragile
+      },
+      image: itemImage
+    };
+
+    try {
+      const saved = await updateItem(targetId, apiUpdate);
+      setItems((prev) =>
+        prev.map((i) =>
+          (i._id || i.id) === (editingItem._id || editingItem.id)
+            ? normalizeItemRecord({ ...i, ...saved })
+            : i
+        )
+      );
+      closeView();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error updating item');
+    }
   };
 
   const handleExportCSV = () => {
     const headers = ['Item Code', 'Name', 'Description', 'Category', 'UoM', 'Weight', 'Status'];
-    const csvRows = filteredItems.map(i => {
+    const csvRows = filteredItems.map((i) => {
       return [i.id, `"${i.name}"`, `"${i.description}"`, `"${i.category}"`, `"${i.uom}"`, `"${i.weight}"`, `"${i.status}"`].join(',');
     });
     const csvContent = [headers.join(','), ...csvRows].join('\n');
@@ -212,14 +280,21 @@ export default function Items() {
   };
 
   const triggerImageUpload = () => {
-    if(fileInputRef.current) {
-        fileInputRef.current.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
   const generateAutoSku = () => {
-    setSku(`ITM-${Math.floor(Math.random() * 9000) + 1000}`);
+    setSku(buildNextItemCode(items));
   };
+
+  const totalMetricTonnes = (items.reduce((sum, i) => sum + (Number(i.weightKg) || 0), 0) / 1000).toFixed(2);
+  const coldChainCount = items.filter((i) => (i.category || '').toLowerCase().includes('cold') || (i.category || '').toLowerCase().includes('fresh')).length;
+  const coldChainPct = items.length > 0 ? ((coldChainCount / items.length) * 100).toFixed(1) : '0.0';
+  const activeCount = items.filter((i) => i.status === 'Active').length;
+  const restrictedOrReviewCount = items.filter((i) => i.status !== 'Active').length;
+  const compliancePct = items.length > 0 ? ((activeCount / items.length) * 100).toFixed(1) : '100.0';
 
   // ----------------------------------------------------
   // 1. ADD NEW ITEM VIEW
@@ -268,17 +343,17 @@ export default function Items() {
                 
                 <div>
                   <div className="flex justify-between items-center mb-2">
-                    <label className="text-[11px] font-bold text-gray-900">Item Code / SKU <span className="text-red-500">*</span></label>
+                    <label className="text-[11px] font-bold text-gray-900">Item Code / SKU <span className="text-[#0fa979]">(Auto)</span></label>
                     <button type="button" onClick={generateAutoSku} className="text-[10px] font-bold text-[#0fa979] flex items-center gap-1 hover:underline cursor-pointer"><RotateCcw size={10}/> Auto-generate</button>
                   </div>
-                  <input type="text" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="e.g., SKU-9045 or ITM-1024" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none focus:border-[#0fa979] shadow-sm transition-all" required/>
-                  <p className="text-[9px] text-gray-500 mt-2 font-medium">Unique alphanumeric master identifier (minimum 4 characters).</p>
+                  <input type="text" value={sku} readOnly className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-[13px] font-bold text-[#113b2e] outline-none shadow-sm cursor-default"/>
+                  <p className="text-[9px] text-gray-500 mt-2 font-medium">Automatically generated unique SKU code (click Auto-generate to refresh).</p>
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-bold text-gray-900 mb-2">Gross Weight per Unit <span className="text-red-500">*</span></label>
                   <div className="relative">
-                    <input type="text" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} placeholder="0.00" className="w-full pl-4 pr-16 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none focus:border-[#0fa979] shadow-sm transition-all" required/>
+                    <input type="number" step="0.01" min="0" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} placeholder="0.00" className="w-full pl-4 pr-16 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none focus:border-[#0fa979] shadow-sm transition-all" required/>
                     <div className="absolute inset-y-0 right-1 flex items-center">
                        <span className="bg-gray-50 border border-gray-100 text-gray-500 text-[10px] font-bold px-2 py-1 rounded">kg / unit</span>
                     </div>
@@ -300,8 +375,10 @@ export default function Items() {
                       <option value="Dry Grocery / Export">Dry Grocery / Export</option>
                       <option value="Cold-Chain Perishables">Cold-Chain Perishables</option>
                       <option value="Pharmaceuticals">Pharmaceuticals</option>
+                      <option value="Dairy & Ambient">Dairy & Ambient</option>
                       <option value="Chemicals / Hazmat">Chemicals / Hazmat</option>
                       <option value="Agricultural Spices">Agricultural Spices</option>
+                      <option value="Fresh Produce">Fresh Produce</option>
                     </select>
                     <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} strokeWidth={2.5}/></div>
                   </div>
@@ -318,6 +395,7 @@ export default function Items() {
                       <option value="Master Box">Master Box</option>
                       <option value="Pallet (EURO)">Pallet (EURO)</option>
                       <option value="Drum (200L)">Drum (200L)</option>
+                      <option value="Crate (15kg)">Crate (15kg)</option>
                     </select>
                     <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} strokeWidth={2.5}/></div>
                   </div>
@@ -331,12 +409,12 @@ export default function Items() {
                    <CheckCircle2 size={14} className="text-[#0d9468]"/>
                  </div>
                  <div className="text-[11px] text-[#113b2e] leading-relaxed">
-                   <span className="font-bold">Master Data Protocol:</span> SKU will be registered in draft status until verified against international customs clearing tariff codes (HS/HTS) by logistics compliance.
+                   <span className="font-bold">Master Data Protocol:</span> SKU will be registered in active master catalog for quantity-based booking and vehicle capacity calculations.
                  </div>
               </div>
 
               <div className="flex justify-between items-center pt-8 border-t border-gray-100 mt-10">
-                <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1.5"><span className="text-[#0fa979]">●</span> All marked fields (*) are mandatory for dispatch readiness</div>
+                <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1.5"><span className="text-[#0fa979]">●</span> Item code is generated automatically; fill required (*) fields and save</div>
                 <div className="flex gap-4">
                   <button type="button" onClick={closeView} className="px-6 py-2.5 bg-white text-gray-700 font-bold text-[11px] hover:text-gray-900 cursor-pointer border border-gray-200 rounded-lg">Cancel</button>
                   <button type="submit" className="px-8 py-2.5 bg-[#113b2e] text-white rounded-lg font-bold text-[11px] hover:bg-[#0fa979] flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
@@ -375,12 +453,11 @@ export default function Items() {
           </button>
         </div>
         <div className="mb-6 -mt-4">
-           <span className="bg-gray-200 text-gray-600 px-2 py-1 rounded text-[10px] font-bold tracking-widest uppercase">SKU-8042</span>
+           <span className="bg-gray-200 text-gray-600 px-2 py-1 rounded text-[10px] font-bold tracking-widest uppercase">{editingItem.id}</span>
            <p className="text-[11px] text-gray-500 mt-3 font-medium">Global transit parameters, container loading specs, and telematics audit flags.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-[1200px]">
-          {/* Left Column (2 span) */}
           <div className="lg:col-span-2 space-y-6">
             
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 relative">
@@ -415,6 +492,9 @@ export default function Items() {
                         <option value="Cartons / Cases (CTN)">Cartons / Cases (CTN)</option>
                         <option value="Sacks / Bags">Sacks / Bags</option>
                         <option value="Master Box">Master Box</option>
+                        <option value="Pallet (EURO)">Pallet (EURO)</option>
+                        <option value="Drum (200L)">Drum (200L)</option>
+                        <option value="Crate (15kg)">Crate (15kg)</option>
                       </select>
                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                     </div>
@@ -425,7 +505,7 @@ export default function Items() {
                     <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2">
                       <span>Commodity Item Description</span> 
                     </label>
-                    <input type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 outline-none" />
+                    <input type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 outline-none" required/>
                     <p className="text-[9px] text-gray-400 mt-2 font-medium">Registered commercial trade name declared for export bills.</p>
                   </div>
 
@@ -433,9 +513,13 @@ export default function Items() {
                     <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Freight Category</span></label>
                     <div className="relative">
                       <select value={freightCat} onChange={(e) => setFreightCat(e.target.value)} className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none appearance-none focus:border-[#0fa979] shadow-sm">
-                        <option value="Dry Grocery / Export">Dry Goods & Commercial Cargo</option>
+                        <option value="Dry Grocery / Export">Dry Grocery / Export</option>
                         <option value="Cold-Chain Perishables">Cold-Chain Perishables</option>
                         <option value="Pharmaceuticals">Pharmaceuticals</option>
+                        <option value="Dairy & Ambient">Dairy & Ambient</option>
+                        <option value="Chemicals / Hazmat">Chemicals / Hazmat</option>
+                        <option value="Agricultural Spices">Agricultural Spices</option>
+                        <option value="Fresh Produce">Fresh Produce</option>
                       </select>
                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                     </div>
@@ -444,10 +528,22 @@ export default function Items() {
                   <div>
                     <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Gross Carton Weight</span></label>
                     <div className="relative">
-                      <input type="text" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value.replace(/[^\d.]/g,''))} className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none focus:border-[#0fa979] shadow-sm"/>
+                      <input type="number" step="0.01" min="0" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none focus:border-[#0fa979] shadow-sm"/>
                       <div className="absolute inset-y-0 right-1 flex items-center">
                          <span className="bg-gray-100 text-gray-500 font-bold text-[10px] px-2 py-1 rounded">KG</span>
                       </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Catalog Status</span></label>
+                    <div className="relative">
+                      <select value={itemStatus} onChange={(e) => setItemStatus(e.target.value)} className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none appearance-none focus:border-[#0fa979] shadow-sm">
+                        <option value="Active">Active</option>
+                        <option value="Under Review">Under Review</option>
+                        <option value="Restricted">Restricted</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                     </div>
                   </div>
                 </div>
@@ -477,7 +573,7 @@ export default function Items() {
                       </div>
                       <p className="text-[10px] text-gray-500 pr-12 leading-relaxed">Max 3 tiers high under 1,500 kg compression rating. Staging permits certified interlocked column formation.</p>
                    </div>
-                   <div onClick={()=>setStackable(!stackable)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${stackable ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
+                   <div onClick={() => setStackable(!stackable)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${stackable ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
                       <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${stackable ? 'right-0.5' : 'left-0.5'}`}></div>
                    </div>
                 </div>
@@ -489,7 +585,7 @@ export default function Items() {
                       </div>
                       <p className="text-[10px] text-gray-500 pr-12 leading-relaxed">Standard ambient temperature logging active. Requires shaded, dry warehousing at 20°C–28°C envelope.</p>
                    </div>
-                   <div onClick={()=>setTempMonitor(!tempMonitor)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${tempMonitor ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
+                   <div onClick={() => setTempMonitor(!tempMonitor)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${tempMonitor ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
                       <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${tempMonitor ? 'right-0.5' : 'left-0.5'}`}></div>
                    </div>
                 </div>
@@ -501,7 +597,7 @@ export default function Items() {
                       </div>
                       <p className="text-[10px] text-gray-500 pr-12 leading-relaxed">Double poly-foil moisture barrier seal mandatory for export Alba grade quills (&lt;12% relative humidity threshold).</p>
                    </div>
-                   <div onClick={()=>setMoisture(!moisture)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${moisture ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
+                   <div onClick={() => setMoisture(!moisture)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${moisture ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
                       <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${moisture ? 'right-0.5' : 'left-0.5'}`}></div>
                    </div>
                 </div>
@@ -513,7 +609,7 @@ export default function Items() {
                       </div>
                       <p className="text-[10px] text-gray-500 pr-12 leading-relaxed">Reinforced multiwall export cartons; standard shock tolerance without supplemental air pillows.</p>
                    </div>
-                   <div onClick={()=>setFragile(!fragile)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${fragile ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
+                   <div onClick={() => setFragile(!fragile)} className={`w-9 h-5 rounded-full relative cursor-pointer shrink-0 transition-colors ${fragile ? 'bg-[#113b2e]' : 'bg-gray-300'}`}>
                       <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${fragile ? 'right-0.5' : 'left-0.5'}`}></div>
                    </div>
                 </div>
@@ -524,7 +620,6 @@ export default function Items() {
 
           <div className="space-y-6">
             
-            {/* Image Asset Card */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 relative overflow-hidden">
                <div className="flex justify-between items-center mb-4">
                  <h3 className="text-[13px] font-bold text-[#113b2e] flex items-center gap-2"><Camera size={14} className="text-gray-400"/> Asset Visual & Staging</h3>
@@ -563,16 +658,15 @@ export default function Items() {
                   </div>
                   <div className="bg-gray-50 border border-gray-100 rounded-lg p-2 text-center">
                      <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">TOTAL GROSS</div>
-                     <div className="text-[11px] font-bold text-gray-900 mt-1">622.0 kg</div>
+                     <div className="text-[11px] font-bold text-gray-900 mt-1">{(Number(grossWeight || 0) * 40 || 622.0).toFixed(1)} kg</div>
                   </div>
                </div>
                
-               <button onClick={triggerImageUpload} className="w-full py-2 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
+               <button type="button" onClick={triggerImageUpload} className="w-full py-2 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
                  <RotateCcw size={12}/> Replace Image Asset
                </button>
             </div>
 
-            {/* Certifications Card */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-sm font-bold text-[#113b2e] flex items-center gap-2"><CheckCircle2 size={16} className="text-gray-400"/> Regulatory<br/>Compliance</h3>
@@ -624,7 +718,6 @@ export default function Items() {
           </div>
         </div>
         
-        {/* Fixed Footer Bar */}
         <div className="max-w-[1200px] mx-auto mt-6 bg-white border border-gray-100 rounded-xl shadow-sm p-4 flex justify-between items-center">
            <div className="flex items-center gap-6 text-[10px] text-gray-400 font-medium">
              <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-[#0fa979] rounded-full"></span> Last synchronized: <span className="font-bold text-gray-700">Oct 24, 2026 at<br/>15:10 IST</span></div>
@@ -655,8 +748,8 @@ export default function Items() {
             <h1 className="text-2xl font-bold text-[#173F35]">Item Management</h1>
             <div className="flex gap-2">
                <span className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5">Total SKUs: {items.length}</span>
-               <span className="bg-[#d1f4e0] text-[#0d9468] px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5">Active: {items.filter(i => i.status === 'Active').length}</span>
-               <span className="bg-red-50 text-red-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 border border-red-100">Low Stock / Alert: 16</span>
+               <span className="bg-[#d1f4e0] text-[#0d9468] px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5">Active: {activeCount}</span>
+               <span className="bg-red-50 text-red-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 border border-red-100">Low Stock / Alert: {restrictedOrReviewCount}</span>
             </div>
           </div>
           <p className="mt-1 text-sm text-[#64748B]">
@@ -681,11 +774,11 @@ export default function Items() {
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative">
           <div className="absolute top-6 right-6 w-8 h-8 rounded-full bg-[#e8f8f2] text-[#0fa979] flex items-center justify-center"><Box size={14}/></div>
           <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">TOTAL CATALOG WEIGHT RATING</div>
-          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-8 flex flex-col gap-1">184.6 Metric<br/><span className="text-[26px]">Tonnes</span></div>
+          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-8 flex flex-col gap-1">{totalMetricTonnes} Metric<br/><span className="text-[26px]">Tonnes</span></div>
           
           <div className="flex justify-between items-end border-t border-gray-100 pt-4">
              <div className="text-[10px] font-medium text-gray-500 leading-relaxed pr-4">Active inventory payload in<br/>transit across warehouses</div>
-             <div className="text-[11px] font-bold text-[#0fa979] flex items-center gap-1 bg-[#e8f8f2] px-2 py-1 rounded"><Activity size={12}/> +3.8%</div>
+             <div className="text-[11px] font-bold text-[#0fa979] flex items-center gap-1 bg-[#e8f8f2] px-2 py-1 rounded"><Activity size={12}/> Live DB</div>
           </div>
         </div>
 
@@ -693,7 +786,7 @@ export default function Items() {
           <div>
               <div className="absolute top-6 right-6 w-8 h-8 rounded-lg bg-gray-50 text-gray-600 border border-gray-200 flex items-center justify-center"><Snowflake size={14}/></div>
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">COLD-CHAIN MONITORED ITEMS</div>
-              <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-2 flex items-baseline gap-2">42 SKUs <span className="text-[11px] font-bold text-gray-400 tracking-normal">(28.4%)</span></div>
+              <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-2 flex items-baseline gap-2">{coldChainCount} SKUs <span className="text-[11px] font-bold text-gray-400 tracking-normal">({coldChainPct}%)</span></div>
           </div>
           <div className="flex justify-between items-end border-t border-gray-100 pt-4 mt-6">
              <div className="text-[10px] font-medium text-gray-500 leading-relaxed pr-4">Sub-zero & chilled items<br/>requiring refrigerated<br/>reefers</div>
@@ -705,7 +798,7 @@ export default function Items() {
           <div>
               <div className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center text-[#0fa979]"><CheckCircle2 size={24} strokeWidth={2}/></div>
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">COMPLIANCE & SAFETY RATING</div>
-              <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-2 flex items-baseline gap-2">99.2% <span className="text-[11px] font-bold text-[#0fa979] uppercase tracking-widest">Audit Cleared</span></div>
+              <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-2 flex items-baseline gap-2">{compliancePct}% <span className="text-[11px] font-bold text-[#0fa979] uppercase tracking-widest">Audit Cleared</span></div>
           </div>
           <div className="flex justify-between items-end border-t border-gray-100 pt-4 mt-6">
              <div className="text-[10px] font-medium text-gray-500 leading-relaxed pr-4">SLA Standards &<br/>phytosanitary customs<br/>compliance</div>
@@ -720,7 +813,7 @@ export default function Items() {
           <div className="relative flex-1 max-w-[320px]">
             <Search className="absolute left-4 top-2.5 text-gray-400" size={14} />
             <input 
-              type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              type="text" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               placeholder="Search item code, SKU name, barcode, category..." 
               className="w-full pl-10 pr-4 py-2 bg-gray-50 rounded-lg text-[13px] font-medium text-gray-600 outline-none focus:ring-1 focus:ring-[#0fa979]/30 transition-all" 
             />
@@ -728,7 +821,7 @@ export default function Items() {
           
           <div className="flex gap-3 flex-1 justify-end">
             <div className="relative">
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-bold text-gray-700 outline-none cursor-pointer min-w-[160px] hover:bg-gray-100 transition-colors">
+              <select value={categoryFilter} onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-bold text-gray-700 outline-none cursor-pointer min-w-[160px] hover:bg-gray-100 transition-colors">
                 <option value="All Categories">All Categories</option>
                 <option value="Dry Grocery / Export">Dry Grocery / Export</option>
                 <option value="Cold-Chain Perishables">Cold-Chain Perishables</option>
@@ -742,12 +835,12 @@ export default function Items() {
             </div>
 
             <div className="relative">
-              <select value={uomFilter} onChange={(e) => setUomFilter(e.target.value)} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-bold text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
+              <select value={uomFilter} onChange={(e) => { setUomFilter(e.target.value); setCurrentPage(1); }} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-bold text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
                 <option value="All UoMs">All UoMs</option>
                 <option value="Sacks">Sacks</option>
                 <option value="Carton">Cartons</option>
                 <option value="Box">Boxes</option>
-                <option value="Bale">Bales</option>
+                <option value="Pallet">Pallets</option>
                 <option value="Drum">Drums</option>
                 <option value="Crate">Crates</option>
               </select>
@@ -755,7 +848,7 @@ export default function Items() {
             </div>
 
             <div className="relative">
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-bold text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
+              <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-bold text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
                 <option value="All Statuses">All Statuses</option>
                 <option value="Active">Active</option>
                 <option value="Under Review">Under Review</option>
@@ -785,15 +878,23 @@ export default function Items() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {filteredItems.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan="7" className="py-10 text-center text-gray-500 text-[13px] font-medium">Loading items from database...</td></tr>
+            ) : paginatedItems.length === 0 ? (
               <tr><td colSpan="7" className="py-10 text-center text-gray-500 text-[13px] font-medium">No items found matching your filters.</td></tr>
             ) : (
-              filteredItems.map((i) => (
-                <tr key={i.id} className="hover:bg-gray-50/50 transition-colors">
+              paginatedItems.map((i) => (
+                <tr key={i._id || i.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="py-5 px-6 text-center">
                     <span className="font-bold text-gray-700 bg-gray-100/80 px-2.5 py-1.5 rounded-lg text-[11px] tracking-widest flex flex-col items-center leading-tight">
-                       <span>{i.id.split('-')[0]}-</span>
-                       <span className="text-gray-900">{i.id.split('-')[1]}</span>
+                       {i.id.includes('-') ? (
+                         <>
+                           <span>{i.id.split('-')[0]}-</span>
+                           <span className="text-gray-900">{i.id.split('-')[1]}</span>
+                         </>
+                       ) : (
+                         <span className="text-gray-900">{i.id}</span>
+                       )}
                     </span>
                   </td>
                   <td className="py-5 px-6 max-w-[300px]">
@@ -826,8 +927,8 @@ export default function Items() {
                   </td>
                   <td className="py-5 px-6 text-center">
                     <div className="flex justify-center gap-4 text-gray-400">
-                      <button onClick={() => openEditItem(i)} className="hover:text-[#113b2e] transition-colors p-1 cursor-pointer"><Edit2 size={14} strokeWidth={2.5}/></button>
-                      <button onClick={() => handleDelete(i.id)} className="hover:text-red-500 transition-colors p-1 cursor-pointer"><Trash2 size={14} strokeWidth={2.5}/></button>
+                      <button type="button" onClick={() => openEditItem(i)} className="hover:text-[#113b2e] transition-colors p-1 cursor-pointer"><Edit2 size={14} strokeWidth={2.5}/></button>
+                      <button type="button" onClick={() => handleDelete(i)} className="hover:text-red-500 transition-colors p-1 cursor-pointer"><Trash2 size={14} strokeWidth={2.5}/></button>
                     </div>
                   </td>
                 </tr>
@@ -838,25 +939,36 @@ export default function Items() {
 
         <div className="px-6 py-4 flex justify-between items-center border-t border-gray-100 bg-[#fcfdfc]">
           <div className="flex items-center gap-3 text-[11px] text-gray-500 font-bold uppercase tracking-widest">
-             <span>Showing 1 - {filteredItems.length} of {items.length} items</span>
+             <span>
+               Showing {filteredItems.length === 0 ? 0 : (safePage - 1) * rowsPerPage + 1} - {Math.min(safePage * rowsPerPage, filteredItems.length)} of {filteredItems.length} items
+             </span>
              <div className="flex items-center gap-1.5 ml-2">
                 PER PAGE: 
-                <select className="bg-white border border-gray-200 rounded px-2 py-1 outline-none font-bold text-gray-700 cursor-pointer">
-                  <option>10</option>
-                  <option>20</option>
-                  <option>50</option>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="bg-white border border-gray-200 rounded px-2 py-1 outline-none font-bold text-gray-700 cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
                 </select>
              </div>
           </div>
           
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500">
-             <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-100 text-gray-400 cursor-pointer">&lt;</button>
-             <button className="w-6 h-6 rounded bg-[#113b2e] text-white flex items-center justify-center cursor-pointer shadow-sm">1</button>
-             <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-100 text-gray-700 cursor-pointer">2</button>
-             <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-100 text-gray-700 cursor-pointer">3</button>
-             <span className="px-1 tracking-widest">...</span>
-             <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-100 text-gray-700 cursor-pointer">15</button>
-             <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-100 text-gray-700 cursor-pointer">&gt;</button>
+             <button type="button" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-100 text-gray-400 cursor-pointer disabled:opacity-40">&lt;</button>
+             {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNum) => (
+               <button
+                 key={pageNum}
+                 type="button"
+                 onClick={() => setCurrentPage(pageNum)}
+                 className={`w-6 h-6 rounded flex items-center justify-center cursor-pointer ${safePage === pageNum ? 'bg-[#113b2e] text-white shadow-sm' : 'hover:bg-gray-100 text-gray-700'}`}
+               >
+                 {pageNum}
+               </button>
+             ))}
+             <button type="button" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-100 text-gray-700 cursor-pointer disabled:opacity-40">&gt;</button>
           </div>
         </div>
       </div>
