@@ -16,7 +16,7 @@ const login = async (req,res) => {
         const { email, password, rememberMe = false } = req.body;
 
         //validation inputs
-        if(!email || !password){
+        if(typeof email !== "string" || !email.trim() || typeof password !== "string" || !password){
             return res.status(400).json({
                 success: false,
                 message: "Email and password are required"
@@ -49,7 +49,7 @@ const login = async (req,res) => {
         }
 
         //check account status
-        if(user.status != "Active") {
+        if(user.status !== "Active") {
             return res.status(403).json({
                 success: false,
                 message: "Your account is inactive. Please contact the administrator."

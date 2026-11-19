@@ -1,5 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
+const { allowRoles } = require('../middleware/roleMiddleware');
+
+router.use(protect, allowRoles('ADMIN'));
 
 // Import the controller functions
 const { getAllVehicles, createVehicle, updateVehicle, deleteVehicle } = require('../controllers/vehicleController');
