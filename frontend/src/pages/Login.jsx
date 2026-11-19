@@ -1,64 +1,38 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Truck, Mail, Lock, CheckCircle2, X } from 'lucide-react';
+import { Truck, Mail, Lock, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
 import loginImage from '../assets/login.jpeg'; 
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   
   const navigate = useNavigate();
+  const { login } = useAuth();
 
-  
-const handleLogin = (e) => {
-  e.preventDefault();
-
-  if (!email || !password) {
-    alert("Please enter both email and password");
-    return;
-  }
-
-  // Temporary mock users for frontend testing
-  const mockUsers = {
-    "admin@ex.com": {
-      role: "System Administrator",
-      name: "Admin",
-      redirect: "/dashboard",
-    },
-
-    "manager@ex.com": {
-      role: "Store Manager",
-      name: "Store Manager",
-      redirect: "/store/bookings",
-    },
-
-    "emp@ex.com": {
-      role: "Store Employee",
-      name: "Store Employee",
-      redirect: "/store/bookings",
-    },
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      const user = await login({ email: email.trim(), password, rememberMe });
+      if (user.role === 'System Administrator') navigate('/dashboard', { replace: true });
+      else if (['Store Manager', 'Store Employee'].includes(user.role)) navigate('/store', { replace: true });
+      else setLoginError('This account does not have access to the admin or store portal.');
+    } catch (error) {
+      setLoginError(error.response?.data?.message || 'Unable to connect to the server. Please try again.');
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
-
-  const user = mockUsers[email.toLowerCase().trim()];
-
-  if (!user) {
-    alert("Invalid email address. Please try again.");
-    return;
-  }
-
-  // Temporary mock authentication
-  localStorage.setItem("isAuthenticated", "true");
-  localStorage.setItem("token", "mock-jwt-token-12345");
-  localStorage.setItem("role", user.role);
-  localStorage.setItem("userEmail", email);
-  localStorage.setItem("userName", user.name);
-
-  navigate(user.redirect);
-};
 
 
   const handleForgotPasswordSubmit = (e) => {
@@ -147,6 +121,7 @@ const handleLogin = (e) => {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
+            {loginError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{loginError}</p>}
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Email</label>
               <div className="relative">
@@ -171,13 +146,22 @@ const handleLogin = (e) => {
                   <Lock size={18} />
                 </div>
                 <input 
-                  type="password" 
+                  type={showPassword ? 'text' : 'password'} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password" 
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#0fa979]/20 focus:border-[#0fa979] transition-all"
+                  className="w-full pl-11 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#0fa979]/20 focus:border-[#0fa979] transition-all"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
@@ -202,9 +186,10 @@ const handleLogin = (e) => {
 
             <button 
               type="submit" 
-              className="w-full py-3.5 bg-[#0fa979] text-white rounded-xl font-bold text-sm hover:bg-[#0d9468] transition-colors shadow-[0_4px_12px_rgba(15,169,121,0.25)] mt-2 cursor-pointer"
+              disabled={isLoggingIn}
+              className="w-full py-3.5 bg-[#0fa979] text-white rounded-xl font-bold text-sm hover:bg-[#0d9468] disabled:cursor-wait disabled:opacity-70 transition-colors shadow-[0_4px_12px_rgba(15,169,121,0.25)] mt-2 cursor-pointer"
             >
-              Sign In
+              {isLoggingIn ? 'Signing In…' : 'Sign In'}
             </button>
           </form>
         </div>
