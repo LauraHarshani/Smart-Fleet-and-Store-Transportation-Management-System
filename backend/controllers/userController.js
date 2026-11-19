@@ -22,10 +22,18 @@ const getAllUsers = async (req, res) => {
 // 2. Create a new user (POST)
 const createUser = async (req, res) => {
     try {
-        const { id, name, email, role, store, status, avatar } = req.body;
+        const { name, email, phone, role, store, department, status, avatar } = req.body;
+
+        if (!name || !email || !role) {
+            return res.status(400).json({ message: 'Name, email, and role are required' });
+        }
+
+        if (role !== 'ADMIN' && !store) {
+            return res.status(400).json({ message: 'Assigned store is required for non-admin users' });
+        }
 
         // Check if a user with this email already exists
-        const existingUser = await User.findOne({ email });
+        const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
         if (existingUser) return res.status(400).json({ message: 'Email already exists' });
 
         // Generate a default password for the new user
@@ -33,14 +41,14 @@ const createUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash('LogiFleet@123', salt);
 
         const newUser = new User({
-            id: id, 
-            name,
-            email,
-            phone: "+94 77 000 0000", // Assigning a default phone number since the frontend doesn't provide this required field
+            name: name.trim(),
+            email: email.toLowerCase().trim(),
+            phone: phone ? phone.trim() : '+94 77 000 0000',
             password: hashedPassword,
             role,
             store: role === 'ADMIN' ? null : store,
-            isActive: status || 'Active', // Map the frontend 'status' to the DB 'isActive' field
+            department: department ? department.trim() : '',
+            isActive: status || 'Active',
             avatar: avatar || null
         });
 
@@ -61,19 +69,25 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, email, role, store, status, avatar } = req.body;
+        const { name, email, phone, role, store, department, status, avatar } = req.body;
+
+        if (role !== 'ADMIN' && !store) {
+            return res.status(400).json({ message: 'Assigned store is required for non-admin users' });
+        }
 
         const updatedUser = await User.findOneAndUpdate(
             { id: id }, 
             {
-                name,
-                email,
+                name: name?.trim(),
+                email: email?.toLowerCase().trim(),
+                phone: phone?.trim(),
                 role,
                 store: role === 'ADMIN' ? null : store,
-                isActive: status, // Update the 'isActive' field using the frontend 'status' value
+                department: department !== undefined ? department.trim() : '',
+                isActive: status,
                 avatar
             }, 
-            { new: true }
+            { returnDocument: 'after', runValidators: true }
         ).select('-password');
 
         if (!updatedUser) return res.status(404).json({ message: 'User not found' });
@@ -87,16 +101,24 @@ const updateUser = async (req, res) => {
     }
 };
 
-// 4. Delete/Deactivate a user (DELETE)
+// 4. Deactivate a user (Soft Delete)
 const deactivateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const deletedUser = await User.findOneAndDelete({ id: id });
+        const deactivatedUser = await User.findOneAndUpdate(
+            { id: id },
+            { isActive: 'Inactive' },
+            { returnDocument: 'after' }
+        ).select('-password');
         
-        if (!deletedUser) return res.status(404).json({ message: 'User not found' });
-        res.status(200).json({ message: 'User deleted successfully' });
+        if (!deactivatedUser) return res.status(404).json({ message: 'User not found' });
+
+        const userResponse = deactivatedUser.toObject();
+        userResponse.status = userResponse.isActive;
+
+        res.status(200).json({ message: 'User deactivated successfully', user: userResponse });
     } catch (error) {
-        res.status(500).json({ message: 'Error deleting user', error: error.message });
+        res.status(500).json({ message: 'Error deactivating user', error: error.message });
     }
 };
 
