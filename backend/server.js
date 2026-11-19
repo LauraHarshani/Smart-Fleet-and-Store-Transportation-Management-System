@@ -6,6 +6,8 @@ require("dotenv").config();
 const connectDB =require("./config/db");
 
 const authRoutes = require("./routes/authRoutes")
+//Admin paths
+const dashboardRoutes = require("./routes/dashboardRoutes")
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use(cookieParser());
 
 //Routes
 app.use("/api/auth", authRoutes)
+//Admin
+app.use("/api/admin/dashboard", dashboardRoutes);
 
 const PORT = process.env.PORT || 5000;
 
