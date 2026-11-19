@@ -1,5 +1,5 @@
-const Vehicle = require('../models/Vehicle');
-const Store = require('../models/Store');
+const Vehicle = require('../models/vehicle');
+const Store = require('../models/store');
 
 // @desc    Get dashboard summary (Booking summary, utilization)
 // @route   GET /api/reports/summary

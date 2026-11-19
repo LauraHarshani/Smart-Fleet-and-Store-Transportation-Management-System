@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const User = require('./models/User');
-const Store = require('./models/Store');
-const Vehicle = require('./models/Vehicle');
-const Item = require('./models/Item');
+const Store = require('./models/store');
+const Vehicle = require('./models/vehicle');
+const Item = require('./models/item');
 
 dotenv.config();
 
