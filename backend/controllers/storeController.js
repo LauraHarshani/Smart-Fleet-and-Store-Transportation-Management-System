@@ -54,6 +54,8 @@ const REAL_WORLD_MAIN_STORES = [
   }
 ];
 
+const hasIdPath = Boolean(Store && Store.schema && Store.schema.path('id'));
+
 const parseCapacityNumber = (capStr) => {
   if (!capStr) return 0;
   const num = parseFloat(String(capStr).replace(/[^0-9.]/g, ''));
@@ -71,15 +73,22 @@ const enrichStoreWithLiveDBMetrics = async (storeDoc) => {
     const mongoose = require('mongoose');
     if (mongoose.modelNames().includes('Item')) {
       const Item = mongoose.model('Item');
-      const items = await Item.find({
-        $or: [{ storeId: storeObj.id }, { store: storeObj.id }, { store: storeObj.name }]
-      }).lean();
+      const queryConditions = [];
+      if (storeObj.id) queryConditions.push({ storeId: storeObj.id }, { store: storeObj.id });
+      if (storeObj._id) queryConditions.push({ storeId: String(storeObj._id) }, { store: String(storeObj._id) });
+      if (storeObj.name) queryConditions.push({ store: storeObj.name });
 
-      if (Array.isArray(items) && items.length > 0) {
-        const sumQty = items.reduce((acc, item) => acc + (Number(item.quantity ?? item.weight ?? 0) || 0), 0);
-        liveUsedMT = sumQty;
-        if (totalCapMT > 0) {
-          liveUtilization = Math.min(100, Math.round((sumQty / totalCapMT) * 100));
+      if (queryConditions.length > 0) {
+        const items = await Item.find({ $or: queryConditions }).lean();
+        if (Array.isArray(items) && items.length > 0) {
+          const sumQty = items.reduce(
+            (acc, item) => acc + (Number(item.quantity ?? item.weight ?? 0) || 0),
+            0
+          );
+          liveUsedMT = sumQty;
+          if (totalCapMT > 0) {
+            liveUtilization = Math.min(100, Math.round((sumQty / totalCapMT) * 100));
+          }
         }
       }
     }
@@ -93,6 +102,7 @@ const enrichStoreWithLiveDBMetrics = async (storeDoc) => {
 
   return {
     ...storeObj,
+    id: storeObj.id || String(storeObj._id),
     usedCapacityMT: liveUsedMT,
     utilization: liveUtilization
   };
@@ -100,36 +110,30 @@ const enrichStoreWithLiveDBMetrics = async (storeDoc) => {
 
 const buildStoreFilter = (rawId) => {
   const decodedId = decodeURIComponent(rawId || '');
-  const conditions = [{ id: decodedId }];
+  const conditions = [];
+  if (hasIdPath) {
+    conditions.push({ id: decodedId });
+  }
   if (/^[0-9a-fA-F]{24}$/.test(decodedId)) {
     conditions.push({ _id: decodedId });
   }
-  return { $or: conditions };
+  return conditions.length > 1 ? { $or: conditions } : (conditions[0] || { _id: decodedId });
 };
 
 // 1. Fetch all stores (GET)
 const getAllStores = async (req, res) => {
   try {
-    await Store.deleteMany({
-      $or: [
-        { id: { $exists: false } },
-        { id: null },
-        { id: '' },
-        { region: { $exists: false } },
-        { region: null },
-        { region: '' }
-      ]
-    });
-
-    for (const hub of REAL_WORLD_MAIN_STORES) {
-      await Store.updateOne(
-        { id: hub.id },
-        { $setOnInsert: hub },
-        { upsert: true }
-      );
+    if (hasIdPath) {
+      for (const hub of REAL_WORLD_MAIN_STORES) {
+        await Store.updateOne(
+          { id: hub.id },
+          { $setOnInsert: hub },
+          { upsert: true }
+        );
+      }
     }
 
-    const stores = await Store.find().sort({ id: 1, createdAt: 1 });
+    const stores = await Store.find().sort({ createdAt: 1, _id: 1 });
     const enriched = await Promise.all(stores.map(enrichStoreWithLiveDBMetrics));
     res.status(200).json(enriched);
   } catch (error) {
@@ -142,7 +146,7 @@ const getAllStores = async (req, res) => {
 const createStore = async (req, res) => {
   try {
     const payload = { ...req.body };
-    if (!payload.id || !payload.id.trim()) {
+    if (hasIdPath && (!payload.id || !payload.id.trim())) {
       const prefix = (payload.region || 'STR')
         .replace(/[^A-Za-z]/g, '')
         .slice(0, 3)
@@ -170,7 +174,7 @@ const updateStore = async (req, res) => {
     const updatedStore = await Store.findOneAndUpdate(
       buildStoreFilter(id),
       req.body,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedStore) {
