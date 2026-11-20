@@ -1,232 +1,266 @@
-import React, { useState } from 'react';
-import { 
-  Download, FileText, Search, Filter, 
-  ShieldCheck, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight 
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Activity, AlertTriangle, CheckCircle2, ChevronLeft,
+  ChevronRight, Download, FileText, Search, ShieldCheck, Truck,
 } from 'lucide-react';
+import api from '../../services/api';
 
-const Reports = () => {
+const auditPageSize = 10;
+
+const formatTimestamp = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+};
+
+const formatDetails = (details) => {
+  if (!details) return '—';
+  if (typeof details === 'string') return details;
+  if (typeof details !== 'object') return String(details);
+  return Object.entries(details).map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`).join(' · ');
+};
+
+const escapeCsv = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+
+function MetricCard({ title, value, description, icon: Icon, tone }) {
+  const tones = {
+    green: 'bg-green-50 text-green-700',
+    blue: 'bg-blue-50 text-blue-700',
+    amber: 'bg-amber-50 text-amber-700',
+    red: 'bg-red-50 text-red-600',
+  };
+  return (
+    <div className="flex items-start justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div>
+        <p className="text-[10px] font-bold tracking-wider text-gray-500">{title}</p>
+        <p className="mt-1 text-2xl font-bold text-gray-800">{value}</p>
+        <p className="mt-1 text-xs text-gray-500">{description}</p>
+      </div>
+      <div className={`rounded-lg p-2 ${tones[tone]}`}><Icon size={18} /></div>
+    </div>
+  );
+}
+
+function Reports() {
+  const [summary, setSummary] = useState(null);
+  const [bookingReport, setBookingReport] = useState(null);
+  const [vehicleUtilization, setVehicleUtilization] = useState([]);
+  const [reportLoading, setReportLoading] = useState(true);
+  const [reportError, setReportError] = useState('');
+
   const [searchTerm, setSearchTerm] = useState('');
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditPages, setAuditPages] = useState(0);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditError, setAuditError] = useState('');
 
-  const auditData = [
-    { id: 1, time: "2026-10-28 14:32:04", type: "Route Override", target: "TRP-884", operator: "Sara Lin", note: "Closure on Galle Road. Reassigned to internal route via Battaramulla.", status: "Verified" },
-    { id: 2, time: "2026-10-28 14:18:22", type: "Inspection Warning", target: "DRV-301", operator: "Policy Monitor", note: "Driver rest violation warning at 4h 12m.", status: "Pending Review" },
-    { id: 3, time: "2026-10-28 13:45:10", type: "Capacity Exception", target: "TK-105", operator: "Nimal Perera", note: "+3.2% volume overage approved by duty manager.", status: "Verified" },
-    { id: 4, time: "2026-10-28 12:10:55", type: "Driver Mismatch", target: "TRP-879", operator: "Dilshan Silva", note: "Shift swap: Kamal J. assigned to prime mover WP-879.", status: "Logged" },
-    { id: 5, time: "2026-10-28 10:05:18", type: "Seal Integrity", target: "SL-852", operator: "Gate 03 Scanner", note: "NFC tamper seal verified intact on dispatch.", status: "Verified" },
-  ];
+  useEffect(() => {
+    let active = true;
+    const loadReportData = async () => {
+      setReportLoading(true);
+      setReportError('');
+      const results = await Promise.allSettled([
+        api.get('/reports/summary'),
+        api.get('/reports/bookings'),
+        api.get('/reports/vehicle-utilization'),
+      ]);
+      if (!active) return;
+      const failures = [];
+      if (results[0].status === 'fulfilled') setSummary(results[0].value.data.data);
+      else failures.push('summary');
+      if (results[1].status === 'fulfilled') setBookingReport(results[1].value.data.data);
+      else failures.push('booking');
+      if (results[2].status === 'fulfilled') setVehicleUtilization(results[2].value.data.data || []);
+      else failures.push('vehicle utilization');
+      if (failures.length) setReportError(`Unable to load ${failures.join(', ')} report data.`);
+      setReportLoading(false);
+    };
+    loadReportData();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAuditPage(1);
+      setAuditSearch(searchTerm.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    let active = true;
+    const loadAuditLogs = async () => {
+      setAuditLoading(true);
+      setAuditError('');
+      try {
+        const response = await api.get('/audit-logs', {
+          params: { page: auditPage, limit: auditPageSize, search: auditSearch },
+        });
+        if (!active) return;
+        setAuditLogs(response.data.data || []);
+        setAuditTotal(response.data.total || 0);
+        setAuditPages(response.data.pages || 0);
+      } catch (error) {
+        if (!active) return;
+        setAuditError(error.response?.data?.message || 'Unable to load audit records.');
+        setAuditLogs([]);
+        setAuditTotal(0);
+        setAuditPages(0);
+      } finally {
+        if (active) setAuditLoading(false);
+      }
+    };
+    loadAuditLogs();
+    return () => { active = false; };
+  }, [auditPage, auditSearch]);
+
+  const bookingBars = useMemo(() => {
+    const rows = [
+      ['Completed', bookingReport?.completed || 0, 'bg-emerald-700'],
+      ['Approved', bookingReport?.approved || 0, 'bg-emerald-500'],
+      ['Pending', bookingReport?.pending || 0, 'bg-amber-500'],
+      ['Cancelled', bookingReport?.cancelled || 0, 'bg-slate-400'],
+      ['Rejected', bookingReport?.rejected || 0, 'bg-rose-500'],
+      ['Delayed trips', bookingReport?.delayed || 0, 'bg-orange-500'],
+    ];
+    return rows;
+  }, [bookingReport]);
+
+  const maxBookingCount = Math.max(1, ...bookingBars.map(([, value]) => value));
+  const auditStart = auditTotal ? (auditPage - 1) * auditPageSize + 1 : 0;
+  const auditEnd = Math.min(auditPage * auditPageSize, auditTotal);
+
+  const exportCsv = () => {
+    const columns = ['Timestamp', 'Action', 'Entity type', 'Entity ID', 'Operator', 'Details'];
+    const rows = auditLogs.map((log) => [
+      formatTimestamp(log.timestamp), log.action, log.entityType, log.entityId,
+      log.performedBy?.name || log.performedBy?.email || 'System', formatDetails(log.details),
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `audit-logs-page-${auditPage}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex flex-col gap-6">
-      
-      {/* Header Section */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[10px] text-gray-500 font-bold tracking-wider uppercase">LogiFleet / Audit & Reports</p>
-          <h1 className="text-2xl font-bold text-gray-800 mt-1">Reports & Operational Audit</h1>
-          <p className="text-sm text-gray-500">Comprehensive compliance review, delivery SLA monitoring, and operational logs.</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">LogiFleet / Audit &amp; Reports</p>
+          <h1 className="mt-1 text-2xl font-bold text-gray-800">Reports &amp; Operational Audit</h1>
+          <p className="text-sm text-gray-500">Live operational metrics and recorded audit activity.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 bg-white">
-            Oct 01 - Oct 31, 2026
+        <div className="flex items-center gap-2">
+          <button onClick={exportCsv} disabled={!auditLogs.length} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">
+            <Download size={14} /> Export current page
           </button>
-          <select className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium bg-white">
-            <option>Western Province Hub</option>
-          </select>
-          <button className="flex items-center gap-2 px-4 py-1.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 bg-white">
-            <Download size={14} /> Export CSV
-          </button>
-          <button className="flex items-center gap-2 px-4 py-1.5 bg-[#0B2B26] text-white rounded-lg text-sm font-medium hover:bg-[#164B41]">
-            <FileText size={14} /> Download PDF
+          <button onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-[#0B2B26] px-4 py-2 text-sm font-medium text-white hover:bg-[#164B41]">
+            <FileText size={14} /> Print / Save PDF
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wider">TOTAL OPERATIONS</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">1,482</p>
-            <p className="text-xs text-green-600 font-medium mt-1">↑ 4.2% vs last period</p>
-          </div>
-          <div className="p-2 bg-gray-50 text-gray-400 rounded-lg"><CheckCircle2 size={18} /></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wider">ON-TIME SLA DELIVERY</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">96.8%</p>
-            <p className="text-xs text-green-600 font-medium mt-1">↑ 1.2% above 95% target</p>
-          </div>
-          <div className="p-2 bg-green-50 text-green-600 rounded-lg"><ShieldCheck size={18} /></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wider">FLEET CAPACITY UTILIZATION</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">88.4%</p>
-            <p className="text-xs text-green-600 font-medium mt-1">↑ 2.1% vs last period</p>
-          </div>
-          <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Filter size={18} /></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wider">AUDIT EXCEPTION RATE</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">1.2%</p>
-            <p className="text-xs text-red-500 font-medium mt-1">↓ 0.3% reduction</p>
-          </div>
-          <div className="p-2 bg-red-50 text-red-500 rounded-lg"><AlertTriangle size={18} /></div>
-        </div>
+      {reportError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">{reportError}</p>}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+        <MetricCard title="TOTAL OPERATIONS" value={reportLoading ? '…' : (summary?.totalOperations ?? 0).toLocaleString()} description="All bookings and trips" icon={CheckCircle2} tone="green" />
+        <MetricCard title="ON-TIME TRIP RATE" value={reportLoading ? '…' : (summary?.onTimeSLA || '0.0%')} description="Completed vs delayed trips · 30 days" icon={ShieldCheck} tone="green" />
+        <MetricCard title="FLEET UTILIZATION" value={reportLoading ? '…' : (summary?.fleetUtilization || '0.0%')} description="Average vehicle trip time · 30 days" icon={Truck} tone="blue" />
+        <MetricCard title="AUDIT EXCEPTION RATE" value={reportLoading ? '…' : (summary?.auditExceptionRate || '0.0%')} description="Exceptions, deviations, and alerts" icon={AlertTriangle} tone="red" />
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* SLA Trends Chart */}
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-gray-800 text-sm">SLA Performance Trends</h3>
-            <span className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded">Target 95.0%</span>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-gray-800">Booking &amp; Trip Outcomes</h2>
+            <span className="text-xs text-gray-500">{bookingReport?.totalBookings ?? 0} bookings</span>
           </div>
-          <p className="text-xs text-gray-500 mb-4">Weekly on-time delivery vs 95.0% target</p>
-          
-          <div className="flex items-end justify-between h-32 px-4 pb-2 border-b border-gray-100">
-            {[94.2, 96.1, 97.4, 96.8].map((val, i) => (
-              <div key={i} className="flex flex-col items-center gap-2 w-12">
-                <div className="w-full bg-[#0B2B26] rounded-t-sm" style={{ height: `${val}%` }}></div>
+          <p className="mb-5 text-xs text-gray-500">Current record counts by status.</p>
+          <div className="space-y-3">
+            {bookingBars.map(([label, value, color]) => (
+              <div key={label}>
+                <div className="mb-1 flex justify-between text-xs"><span className="text-gray-600">{label}</span><span className="font-semibold text-gray-800">{value}</span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className={`h-full rounded-full ${color}`} style={{ width: `${(value / maxBookingCount) * 100}%` }} /></div>
               </div>
             ))}
           </div>
-          <div className="flex justify-between px-4 mt-2 text-[10px] text-gray-400">
-            <span>Week 1</span><span>Week 2</span><span>Week 3</span><span>Week 4</span>
-          </div>
-        </div>
+        </section>
 
-        {/* Depot Capacity */}
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          <h3 className="font-bold text-gray-800 text-sm mb-1">Depot Capacity & Utilization</h3>
-          <p className="text-xs text-gray-500 mb-6">Dock bay utilization and gate activity</p>
-          
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs font-medium mb-1">
-                <span className="text-gray-700">Pelayagoda Logistics Center</span>
-                <span className="text-gray-900 font-bold">84.6%</span>
-              </div>
-              <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#0B2B26] rounded-full w-[84.6%]"></div></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-medium mb-1">
-                <span className="text-gray-700">Colombo Central Depot</span>
-                <span className="text-gray-900 font-bold">92.4%</span>
-              </div>
-              <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#0B2B26] rounded-full w-[92.4%]"></div></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-medium mb-1">
-                <span className="text-gray-700">Kelaniya Sorting Facility</span>
-                <span className="text-gray-900 font-bold">85.1%</span>
-              </div>
-              <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#0B2B26] rounded-full w-[85.1%]"></div></div>
-            </div>
+        <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-gray-800">Vehicle Utilization</h2>
+            <span className="text-xs text-gray-500">Last 30 days</span>
           </div>
-        </div>
+          <p className="mb-5 text-xs text-gray-500">Measured from recorded trip start and end times.</p>
+          {vehicleUtilization.length ? (
+            <div className="max-h-60 space-y-3 overflow-y-auto pr-1">
+              {vehicleUtilization.map((vehicle) => (
+                <div key={vehicle.vehicleId || vehicle.registrationNumber}>
+                  <div className="mb-1 flex justify-between gap-3 text-xs"><span className="truncate text-gray-600">{vehicle.registrationNumber || vehicle.vehicleId} · {vehicle.type}</span><span className="shrink-0 font-semibold text-gray-800">{vehicle.utilizationPercentage}%</span></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-[#0B2B26]" style={{ width: `${Math.min(100, Math.max(0, vehicle.utilizationPercentage || 0))}%` }} /></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex min-h-36 flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 text-center">
+              <Activity size={20} className="mb-2 text-gray-400" />
+              <p className="text-sm font-medium text-gray-600">No vehicle trip data</p>
+              <p className="mt-1 text-xs text-gray-400">Recorded trip start and end times are needed to calculate utilization.</p>
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Audit Table Section */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        
-        {/* Table Filters */}
-        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-          <div className="flex items-center gap-3 w-1/2">
-            <div className="relative w-full max-w-md">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="Search operations, vehicles, operators..." 
-                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 outline-none">
-              <option>EVENT: ALL EVENTS</option>
-              <option>EVENT: OVERRIDE</option>
-              <option>EVENT: INSPECTION</option>
-            </select>
-            <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 outline-none">
-              <option>STATUS: ALL STATUSES</option>
-              <option>STATUS: VERIFIED</option>
-              <option>STATUS: PENDING</option>
-            </select>
+      <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/50 p-4">
+          <div>
+            <h2 className="text-sm font-bold text-gray-800">Audit Log</h2>
+            <p className="mt-0.5 text-xs text-gray-500">{auditTotal.toLocaleString()} recorded events</p>
           </div>
-          <div className="flex bg-gray-100 p-1 rounded-lg">
-            <button className="px-4 py-1 text-xs font-bold bg-[#0B2B26] text-white rounded-md">All (428)</button>
-            <button className="px-4 py-1 text-xs font-medium text-gray-600 hover:text-gray-900">Overrides</button>
-            <button className="px-4 py-1 text-xs font-medium text-gray-600 hover:text-gray-900">Pending</button>
-          </div>
+          <label className="relative w-full max-w-sm">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="search" placeholder="Search action, entity, or ID…" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600" />
+          </label>
         </div>
 
-        {/* Table */}
+        {auditError && <p role="alert" className="border-b border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{auditError}</p>}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="text-[10px] text-gray-400 bg-gray-50 border-b border-gray-100 uppercase tracking-wider">
-                <th className="py-3 px-4 font-bold">Timestamp</th>
-                <th className="py-3 px-4 font-bold">Event Type</th>
-                <th className="py-3 px-4 font-bold">Target Entity</th>
-                <th className="py-3 px-4 font-bold">Operator</th>
-                <th className="py-3 px-4 font-bold">Operational Notes</th>
-                <th className="py-3 px-4 font-bold">Status</th>
-              </tr>
-            </thead>
+          <table className="w-full min-w-[850px] border-collapse text-left">
+            <thead><tr className="border-b border-gray-100 bg-gray-50 text-[10px] uppercase tracking-wider text-gray-400">
+              <th className="px-4 py-3 font-bold">Timestamp</th><th className="px-4 py-3 font-bold">Action</th><th className="px-4 py-3 font-bold">Entity</th><th className="px-4 py-3 font-bold">Operator</th><th className="px-4 py-3 font-bold">Details</th>
+            </tr></thead>
             <tbody className="text-sm">
-              {auditData.filter(item => item.note.toLowerCase().includes(searchTerm.toLowerCase())).map((row) => (
-                <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                  <td className="py-4 px-4 text-gray-600 font-medium">{row.time}</td>
-                  <td className="py-4 px-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
-                      row.type.includes('Override') ? 'bg-amber-100 text-amber-700' :
-                      row.type.includes('Warning') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                    }`}>
-                      {row.type}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4 font-bold text-gray-800">{row.target}</td>
-                  <td className="py-4 px-4 text-gray-700">{row.operator}</td>
-                  <td className="py-4 px-4 text-gray-500 text-xs max-w-xs">{row.note}</td>
-                  <td className="py-4 px-4">
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${
-                      row.status === 'Verified' ? 'text-green-600' : 
-                      row.status === 'Pending Review' ? 'text-red-500' : 'text-gray-500'
-                    }`}>
-                      {row.status === 'Verified' && <CheckCircle2 size={14} />}
-                      {row.status === 'Pending Review' && <AlertTriangle size={14} />}
-                      {row.status === 'Logged' && <FileText size={14} />}
-                      {row.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {auditLoading ? <tr><td colSpan="5" className="py-10 text-center text-sm text-gray-500">Loading audit records…</td></tr> : auditLogs.length === 0 ? <tr><td colSpan="5" className="py-10 text-center text-sm text-gray-500">{auditError ? 'Audit records could not be loaded.' : 'No matching audit records.'}</td></tr> : auditLogs.map((log) => {
+                const isAlert = /exception|deviation|alert/i.test(log.action || '');
+                return <tr key={log._id} className="border-b border-gray-50 align-top hover:bg-gray-50/70">
+                  <td className="whitespace-nowrap px-4 py-4 text-xs text-gray-600">{formatTimestamp(log.timestamp)}</td>
+                  <td className="px-4 py-4"><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-bold ${isAlert ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-800'}`}>{log.action || 'Event'}</span></td>
+                  <td className="px-4 py-4"><div className="font-semibold text-gray-800">{log.entityType || 'Entity'}</div><div className="mt-0.5 text-xs text-gray-500">{log.entityId || '—'}</div></td>
+                  <td className="px-4 py-4 text-gray-700">{log.performedBy?.name || log.performedBy?.email || 'System'}</td>
+                  <td className="max-w-sm px-4 py-4 text-xs leading-relaxed text-gray-600">{formatDetails(log.details)}</td>
+                </tr>;
+              })}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="p-4 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
-          <p className="text-xs text-gray-500">Showing <span className="font-bold text-gray-800">1 - 5</span> of <span className="font-bold text-gray-800">428</span> audit records</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/50 p-4">
+          <p className="text-xs text-gray-500">Showing <span className="font-bold text-gray-800">{auditStart}–{auditEnd}</span> of <span className="font-bold text-gray-800">{auditTotal}</span></p>
           <div className="flex items-center gap-2">
-            <button className="p-1 rounded hover:bg-gray-200 text-gray-500"><ChevronLeft size={16} /></button>
-            <button className="w-6 h-6 rounded bg-[#0B2B26] text-white text-xs font-bold flex items-center justify-center">1</button>
-            <button className="w-6 h-6 rounded hover:bg-gray-200 text-gray-700 text-xs font-medium flex items-center justify-center">2</button>
-            <button className="w-6 h-6 rounded hover:bg-gray-200 text-gray-700 text-xs font-medium flex items-center justify-center">3</button>
-            <span className="text-gray-400 text-xs px-1">...</span>
-            <button className="w-6 h-6 rounded hover:bg-gray-200 text-gray-700 text-xs font-medium flex items-center justify-center">Next</button>
-            <button className="p-1 rounded hover:bg-gray-200 text-gray-500"><ChevronRight size={16} /></button>
+            <button onClick={() => setAuditPage((page) => Math.max(1, page - 1))} disabled={auditPage <= 1 || auditLoading} className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-40" aria-label="Previous audit page"><ChevronLeft size={18} /></button>
+            <span className="min-w-20 text-center text-xs font-semibold text-gray-700">Page {auditPages ? auditPage : 0} of {auditPages}</span>
+            <button onClick={() => setAuditPage((page) => Math.min(auditPages, page + 1))} disabled={auditPage >= auditPages || auditLoading} className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-40" aria-label="Next audit page"><ChevronRight size={18} /></button>
           </div>
         </div>
-
-      </div>
-
+      </section>
     </div>
   );
-};
+}
 
 export default Reports;
