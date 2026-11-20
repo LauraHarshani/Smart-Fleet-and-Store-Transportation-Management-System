@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
+const { auditMutation } = require('../middleware/auditMutationMiddleware');
 
-router.use(protect, allowRoles('ADMIN'));
+router.use(protect, allowRoles('ADMIN'), auditMutation);
 
 const { getAllItems, createItem, updateItem, deleteItem } = require('../controllers/itemController');
 
