@@ -91,7 +91,7 @@ const pageTitles = {
     '/schedules': 'Vehicle Schedule',
     '/live-tracking': 'Live Tracking',
     '/vehicles': 'Vehicles',
-    '/drivers': 'Drivers',
+    // '/drivers': 'Drivers',
     '/stores': 'Stores',
     '/items': 'Items',
     '/users': 'User Management',
@@ -192,7 +192,7 @@ const AdminLayout = () => {
 
                     <NavCategory title="Management" />
                     <NavItem to="/vehicles" icon={Truck} label="Vehicles" active={isActive('/vehicles')} />
-                    <NavItem to="/drivers" icon={Users} label="Drivers" active={isActive('/drivers')} />
+                    {/* <NavItem to="/drivers" icon={Users} label="Drivers" active={isActive('/drivers')} /> */}
                     <NavItem to="/stores" icon={Store} label="Stores" active={isActive('/stores')} />
                     <NavItem to="/items" icon={Package} label="Items" active={isActive('/items')} />
                     <NavItem to="/users" icon={UserCog} label="Users" active={isActive('/users')} />
