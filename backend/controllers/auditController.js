@@ -1,16 +1,37 @@
 const AuditLog = require('../models/AuditLog');
 
-// @desc    Get all audit logs
-// @route   GET /api/audit-logs
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const getAuditLogs = async (req, res) => {
   try {
-    const logs = await AuditLog.find()
-      .populate('performedBy', 'name email role') 
-      .sort({ timestamp: -1 }); 
-      
-    res.status(200).json({ success: true, count: logs.length, data: logs });
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 20));
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const filter = search
+      ? { $or: ['action', 'entityType', 'entityId'].map((field) => ({ [field]: { $regex: escapeRegex(search), $options: 'i' } })) }
+      : {};
+
+    const [logs, total] = await Promise.all([
+      AuditLog.find(filter)
+        .populate('performedBy', 'name email role')
+        .sort({ timestamp: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      AuditLog.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: logs.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: logs,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Get audit logs error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load audit logs' });
   }
 };
 
