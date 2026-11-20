@@ -17,6 +17,7 @@ export default function Vehicles() {
   const [vehicles, setVehicles] = useState([]);
   const [stores, setStores] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [driverLoadError, setDriverLoadError] = useState('');
   const [loading, setLoading] = useState(true);
 
   const [currentView, setCurrentView] = useState('list');
@@ -56,7 +57,14 @@ export default function Vehicles() {
           return [];
         }),
         getAllStores().catch(() => []),
-        getAvailableDrivers().catch(() => [])
+        getAvailableDrivers().then((result) => {
+          setDriverLoadError('');
+          return result;
+        }).catch((err) => {
+          console.error('getAvailableDrivers failed:', err);
+          setDriverLoadError(err.response?.data?.message || 'Unable to load drivers.');
+          return [];
+        })
       ]);
 
       const normalizedVehicles = (Array.isArray(vehRes) ? vehRes : []).map((v, idx) => {
@@ -469,6 +477,7 @@ export default function Vehicles() {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">👤</div>
                     <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-gray-50/50 border border-gray-100 rounded-lg text-xs text-gray-600 outline-none appearance-none">
                       <option value="">None / General Pool Vehicle (Unallocated)</option>
+                      {drivers.length === 0 && <option value="" disabled>{driverLoadError || 'No active driver accounts found'}</option>}
                       {drivers.map((drv) => (
                         <option key={drv._id} value={drv._id}>{drv.name} ({drv.email})</option>
                       ))}
@@ -720,6 +729,7 @@ export default function Vehicles() {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#113b2e]">👤</div>
                       <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-[#113b2e] outline-none appearance-none">
                         <option value="">Unallocated / Pool</option>
+                        {drivers.length === 0 && <option value="" disabled>{driverLoadError || 'No active driver accounts found'}</option>}
                         {drivers.map((drv) => (
                           <option key={drv._id} value={drv._id}>{drv.name} ({drv.email})</option>
                         ))}
