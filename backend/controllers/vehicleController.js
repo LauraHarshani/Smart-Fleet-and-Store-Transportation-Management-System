@@ -1,21 +1,9 @@
 const Vehicle = require('../models/vehicle');
 const mongoose = require('mongoose');
-
-const ensureUserModelRegistered = () => {
-  if (mongoose.modelNames().includes('User')) return true;
-  try {
-    require('../models/User');
-  } catch (_) {
-    // Ignore if User model is registered elsewhere
-  }
-  return mongoose.modelNames().includes('User');
-};
+const AuthUser = require('../models/authUser');
 
 const applyDriverPopulate = (query) => {
-  if (ensureUserModelRegistered()) {
-    return query.populate('assignedDriver', 'name email phone role status');
-  }
-  return query;
+  return query.populate('assignedDriver', 'name email phone role status');
 };
 
 const buildVehicleFilter = (rawId) => {
@@ -46,6 +34,11 @@ const checkDriverConflict = async (driverId, excludeVehicleFilter = null) => {
   return await Vehicle.findOne(query).lean();
 };
 
+const isActiveDriver = async (driverId) => {
+  if (!mongoose.Types.ObjectId.isValid(driverId)) return false;
+  return Boolean(await AuthUser.exists({ _id: driverId, role: 'DRIVER', status: 'Active' }));
+};
+
 // 1. Fetch all vehicles (GET /api/vehicles)
 const getAllVehicles = async (req, res) => {
   try {
@@ -68,7 +61,9 @@ const createVehicle = async (req, res) => {
       return res.status(400).json({ message: 'Registration plate, model, and vehicle type are required.' });
     }
 
-    if (Number(payload.capacityWeightKg) <= 0 || Number(payload.capacityVolumeM3) < 0) {
+    const weight = Number(payload.capacityWeightKg);
+    const volume = Number(payload.capacityVolumeM3);
+    if (!Number.isFinite(weight) || weight <= 0 || !Number.isFinite(volume) || volume < 0) {
       return res.status(400).json({ message: 'Maximum capacity must be a positive number.' });
     }
 
@@ -77,7 +72,10 @@ const createVehicle = async (req, res) => {
       payload.id = `VH-${401 + count}`;
     }
 
-    if (payload.assignedDriver && mongoose.Types.ObjectId.isValid(payload.assignedDriver)) {
+    if (payload.assignedDriver) {
+      if (!(await isActiveDriver(payload.assignedDriver))) {
+        return res.status(400).json({ message: 'Select an active driver account.' });
+      }
       const conflict = await checkDriverConflict(payload.assignedDriver);
       if (conflict) {
         return res.status(409).json({
@@ -108,11 +106,17 @@ const updateVehicle = async (req, res) => {
     const filter = buildVehicleFilter(id);
     const updates = { ...req.body };
 
-    if (updates.capacityWeightKg !== undefined && Number(updates.capacityWeightKg) <= 0) {
+    if (updates.capacityWeightKg !== undefined && (!Number.isFinite(Number(updates.capacityWeightKg)) || Number(updates.capacityWeightKg) <= 0)) {
       return res.status(400).json({ message: 'Maximum capacity must be greater than zero.' });
     }
+    if (updates.capacityVolumeM3 !== undefined && (!Number.isFinite(Number(updates.capacityVolumeM3)) || Number(updates.capacityVolumeM3) < 0)) {
+      return res.status(400).json({ message: 'Cargo volume must be zero or greater.' });
+    }
 
-    if (updates.assignedDriver && mongoose.Types.ObjectId.isValid(updates.assignedDriver)) {
+    if (updates.assignedDriver) {
+      if (!(await isActiveDriver(updates.assignedDriver))) {
+        return res.status(400).json({ message: 'Select an active driver account.' });
+      }
       const conflict = await checkDriverConflict(updates.assignedDriver, filter);
       if (conflict) {
         return res.status(409).json({
