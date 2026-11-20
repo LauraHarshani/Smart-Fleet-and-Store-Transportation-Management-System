@@ -10,7 +10,7 @@ const REPORT_PERIOD_MS = REPORT_PERIOD_DAYS * 24 * 60 * 60 * 1000;
 const getVehicleUtilizationData = async () => {
   const now = Date.now();
   const periodStart = now - REPORT_PERIOD_MS;
-  const vehicles = await Vehicle.find({}, 'id plate model type status').lean();
+  const vehicles = await Vehicle.find({}, 'id registrationNumber model type status').lean();
   const vehicleIds = vehicles.map((vehicle) => vehicle.id);
   const trips = await Trip.find({
     vehicle: { $in: vehicleIds },
@@ -43,7 +43,7 @@ const getVehicleUtilizationData = async () => {
 
     return {
       vehicleId: vehicle.id,
-      registrationNumber: vehicle.plate,
+      registrationNumber: vehicle.registrationNumber,
       type: vehicle.type,
       status: vehicle.status,
       utilizationPercentage: Number(Math.min((usedMs / REPORT_PERIOD_MS) * 100, 100).toFixed(1)),
@@ -103,15 +103,20 @@ const getVehicleUtilization = async (req, res) => {
 
 const getBookingReports = async (req, res) => {
   try {
-    const [totalBookings, completed, cancelled, rejected, delayed, pending] = await Promise.all([
+    const [totalBookings, completed, cancelled, rejected, delayed, pending, approved, scheduled, inProgress, inReview, changesRequested] = await Promise.all([
       Booking.countDocuments(),
       Booking.countDocuments({ status: 'Completed' }),
       Booking.countDocuments({ status: 'Cancelled' }),
       Booking.countDocuments({ status: 'Rejected' }),
       Trip.countDocuments({ status: 'Delayed' }),
       Booking.countDocuments({ status: 'Pending' }),
+      Booking.countDocuments({ status: 'Approved' }),
+      Booking.countDocuments({ status: 'Scheduled' }),
+      Booking.countDocuments({ status: 'In Progress' }),
+      Booking.countDocuments({ status: 'In Review' }),
+      Booking.countDocuments({ status: 'Changes Requested' }),
     ]);
-    return res.status(200).json({ success: true, data: { totalBookings, completed, cancelled, rejected, delayed, pending } });
+    return res.status(200).json({ success: true, data: { totalBookings, completed, cancelled, rejected, delayed, pending, approved, scheduled, inProgress, inReview, changesRequested } });
   } catch (error) {
     console.error('Booking report error:', error);
     return res.status(500).json({ success: false, message: 'Unable to load booking report' });
