@@ -1,105 +1,23 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Edit2, Trash2, Store as StoreIcon, MapPin, Clock, Shield, CheckCircle2, ArrowLeft, RotateCcw, Download, ChevronDown, Box, Truck, Key, Activity, Snowflake, UploadCloud, Info, Calendar, Gauge, Battery, AlertTriangle, Camera } from 'lucide-react';
+import { getAllVehicles, createVehicle, updateVehicle, deleteVehicle, getAvailableDrivers } from '../../services/vehicleService';
+import { getAllStores } from '../../services/storeService';
+
+const STATUS_STYLE_MAP = {
+  'Active • En Route': 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
+  'In Transit': 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
+  'In Depot • Ready': 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
+  'Available': 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
+  'Maintenance': 'bg-red-50 text-red-600 border-red-100',
+  'Standby': 'bg-gray-100 text-gray-600 border-gray-200',
+  'Inactive': 'bg-gray-100 text-gray-600 border-gray-200'
+};
 
 export default function Vehicles() {
-  const [vehicles, setVehicles] = useState([
-    {
-      id: 'VH-401',
-      plate: 'WP-CAB-8492',
-      model: 'Isuzu Forward FTR 850',
-      type: 'Refrigerated Box',
-      payload: '8.5',
-      volume: '38.0 m³',
-      store: 'Colombo Main Store',
-      status: 'Active • En Route',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
-      image: 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?q=80&w=800&auto=format&fit=crop'
-    },
-    {
-      id: 'VH-408',
-      plate: 'WP-NC-2940',
-      model: 'Hino 500 Series Wide Cab',
-      type: 'Dry Freight Van',
-      payload: '14.0',
-      volume: '54.0 m³',
-      store: 'Kandy Branch',
-      status: 'In Depot • Ready',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
-      image: null
-    },
-    {
-      id: 'VH-512',
-      plate: 'CP-DA-5011',
-      model: 'UD Trucks Quester GWE',
-      type: 'Heavy Flatbed',
-      payload: '22.5',
-      volume: 'Flatbed Deck',
-      store: 'Colombo Main Store',
-      status: 'Active • En Route',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
-      image: null
-    },
-    {
-      id: 'VH-620',
-      plate: 'SP-GA-1194',
-      model: 'Mitsubishi Fuso Fighter',
-      type: 'Dry Freight Van',
-      payload: '5.0',
-      volume: '22.4 m³',
-      store: 'Galle Warehouse',
-      status: 'Maintenance',
-      statusColor: 'bg-red-50 text-red-600 border-red-100',
-      image: null
-    },
-    {
-      id: 'VH-715',
-      plate: 'WP-LY-7389',
-      model: 'Scania R450 V8 Highline',
-      type: 'Prime Mover',
-      payload: '32.0',
-      volume: 'Tractor Unit',
-      store: 'Colombo Main Store',
-      status: 'Active • En Route',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
-      image: null
-    },
-    {
-      id: 'VH-802',
-      plate: 'CP-NC-6344',
-      model: 'Isuzu Giga CXZ Tipper',
-      type: 'Heavy Flatbed',
-      payload: '18.0',
-      volume: '32.0 m³',
-      store: 'Kandy Branch',
-      status: 'Standby',
-      statusColor: 'bg-gray-100 text-gray-600 border-gray-200',
-      image: null
-    },
-    {
-      id: 'VH-830',
-      plate: 'WP-PD-9021',
-      model: 'Thermo King ChillMaster FVR',
-      type: 'Refrigerated Box',
-      payload: '9.0',
-      volume: '41.2 m³',
-      store: 'Colombo Main Store',
-      status: 'In Depot • Ready',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
-      image: null
-    },
-    {
-      id: 'VH-914',
-      plate: 'SP-ND-4412',
-      model: 'Volvo FH16 750 Heavy Haul',
-      type: 'Prime Mover',
-      payload: '45.0',
-      volume: 'Articulated Deck',
-      store: 'Galle Warehouse',
-      status: 'Active • En Route',
-      statusColor: 'bg-[#d1f4e0]/60 text-[#0d9468] border-[#0d9468]/20',
-      image: null
-    }
-  ]);
+  const [vehicles, setVehicles] = useState([]);
+  const [stores, setStores] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [currentView, setCurrentView] = useState('list');
   const [editingVehicle, setEditingVehicle] = useState(null);
@@ -108,6 +26,8 @@ export default function Vehicles() {
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [storeFilter, setStoreFilter] = useState('All Stores');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [rowsPerPage, setRowsPerPage] = useState(8);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [plate, setPlate] = useState('');
   const [vin, setVin] = useState('');
@@ -116,52 +36,133 @@ export default function Vehicles() {
   const [payload, setPayload] = useState('');
   const [volume, setVolume] = useState('');
   const [assignedStore, setAssignedStore] = useState('');
-  const [driver, setDriver] = useState('');
+  const [driverId, setDriverId] = useState('');
   const [odometer, setOdometer] = useState('');
-  const [opStatus, setOpStatus] = useState('');
+  const [opStatus, setOpStatus] = useState('Available');
   const [vehicleImage, setVehicleImage] = useState(null);
 
   const fileInputRef = useRef(null);
 
-  const filteredVehicles = vehicles.filter(v => {
-    const matchesSearch = v.plate.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          v.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          v.id.toLowerCase().includes(searchQuery.toLowerCase());
+  useEffect(() => {
+    loadVehiclesData();
+  }, []);
+
+  const loadVehiclesData = async () => {
+    setLoading(true);
+    try {
+      const [vehRes, storeRes, driverRes] = await Promise.all([
+        getAllVehicles().catch((err) => {
+          console.error('getAllVehicles failed:', err);
+          return [];
+        }),
+        getAllStores().catch(() => []),
+        getAvailableDrivers().catch(() => [])
+      ]);
+
+      const normalizedVehicles = (Array.isArray(vehRes) ? vehRes : []).map((v, idx) => {
+        const statusText = v.status || 'Available';
+        const payloadNum = v.payload !== undefined && v.payload !== null
+          ? String(v.payload)
+          : v.capacityWeightKg !== undefined && v.capacityWeightKg !== null
+            ? (Number(v.capacityWeightKg) / 1000).toFixed(1)
+            : '0.0';
+
+        const volumeText = v.volume
+          ? String(v.volume)
+          : v.capacityVolumeM3 !== undefined && v.capacityVolumeM3 !== null
+            ? `${v.capacityVolumeM3} m³`
+            : 'Standard';
+
+        return {
+          ...v,
+          id: v.id || `VH-${401 + idx}`,
+          plate: v.registrationNumber || v.plate || '',
+          model: v.model || '',
+          type: v.type || 'Dry Freight Van',
+          payload: payloadNum,
+          volume: volumeText,
+          store: v.assignedStore || v.store || 'Colombo Main Store',
+          status: statusText,
+          statusColor: v.statusColor || STATUS_STYLE_MAP[statusText] || STATUS_STYLE_MAP['Available'],
+          image: v.image || null
+        };
+      });
+
+      setVehicles(normalizedVehicles);
+      setStores(Array.isArray(storeRes) ? storeRes : []);
+      setDrivers(Array.isArray(driverRes) ? driverRes : []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredVehicles = vehicles.filter((v) => {
+    const matchesSearch =
+      (v.plate || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (v.model || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (v.id || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === 'All Categories' || v.type === categoryFilter;
     const matchesStore = storeFilter === 'All Stores' || v.store === storeFilter;
-    const matchesStatus = statusFilter === 'All Statuses' || v.status.includes(statusFilter);
+    const matchesStatus = statusFilter === 'All Statuses' || (v.status || '').includes(statusFilter);
     return matchesSearch && matchesCategory && matchesStore && matchesStatus;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredVehicles.length / rowsPerPage));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedVehicles = filteredVehicles.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
 
   const resetFilters = () => {
     setSearchQuery('');
     setCategoryFilter('All Categories');
     setStoreFilter('All Stores');
     setStatusFilter('All Statuses');
+    setCurrentPage(1);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (vehicle) => {
+    const targetId = vehicle.id || vehicle._id;
+    if (!targetId) return;
     if (window.confirm('Are you sure you want to remove this vehicle from the fleet?')) {
-      setVehicles(vehicles.filter(v => v.id !== id));
+      try {
+        await deleteVehicle(targetId);
+        setVehicles((prev) => prev.filter((v) => (v._id || v.id) !== (vehicle._id || vehicle.id)));
+      } catch (error) {
+        alert(error.response?.data?.message || 'Failed to delete vehicle');
+      }
     }
   };
 
   const openAddVehicle = () => {
-    setPlate(''); setVin(''); setMakeModel(''); setBodyType('');
-    setPayload(''); setVolume(''); setAssignedStore(''); setDriver('');
-    setOdometer(''); setOpStatus(''); setVehicleImage(null);
+    setEditingVehicle(null);
+    setPlate('');
+    setVin('');
+    setMakeModel('');
+    setBodyType('');
+    setPayload('');
+    setVolume('');
+    setAssignedStore(stores[0]?.name || '');
+    setDriverId('');
+    setOdometer('');
+    setOpStatus('Available');
+    setVehicleImage(null);
     setCurrentView('add');
   };
 
   const openEditVehicle = (vehicle) => {
     setEditingVehicle(vehicle);
-    setPlate(vehicle.plate);
-    setMakeModel(vehicle.model);
-    setBodyType(vehicle.type);
-    setPayload(vehicle.payload);
-    setVolume(vehicle.volume.replace(' m³', ''));
-    setAssignedStore(vehicle.store);
-    setOpStatus(vehicle.status);
+    setPlate(vehicle.plate || vehicle.registrationNumber || '');
+    setVin(vehicle.vin || '');
+    setMakeModel(vehicle.model || '');
+    setBodyType(vehicle.type || 'Dry Freight Van');
+    setPayload(vehicle.payload || '');
+    setVolume(String(vehicle.volume || '').replace(' m³', ''));
+    setAssignedStore(vehicle.store || vehicle.assignedStore || '');
+    const currentDriver = vehicle.assignedDriver && typeof vehicle.assignedDriver === 'object'
+      ? vehicle.assignedDriver._id
+      : (vehicle.assignedDriver || '');
+    setDriverId(currentDriver);
+    setOdometer(String(vehicle.odometerKm ?? odometer ?? ''));
+    setOpStatus(vehicle.status || 'Available');
     setVehicleImage(vehicle.image || null);
     setCurrentView('edit');
   };
@@ -171,42 +172,109 @@ export default function Vehicles() {
     setEditingVehicle(null);
   };
 
-  const handleCreateVehicle = (e) => {
+  const handleCreateVehicle = async (e) => {
     e.preventDefault();
-    if (!plate || !makeModel) {
+    if (!plate.trim() || !makeModel.trim()) {
       alert('Please fill in required fields (Registration Plate and Make & Model).');
       return;
     }
-    const newVeh = {
-      id: `VH-9${Math.floor(Math.random() * 90) + 10}`,
-      plate: plate,
-      model: makeModel,
+
+    const weightKg = Math.round((parseFloat(payload) || 10.0) * 1000);
+    const volNum = parseFloat(volume) || 0;
+    const chosenStatus = opStatus || 'Available';
+    const selectedDriverObj = drivers.find((d) => String(d._id) === String(driverId));
+
+    const apiPayload = {
+      registrationNumber: plate.trim().toUpperCase(),
+      vin: vin.trim().toUpperCase(),
+      model: makeModel.trim(),
       type: bodyType || 'Dry Freight Van',
-      payload: payload || '10.0',
-      volume: volume ? `${volume} m³` : 'Standard',
-      store: assignedStore || 'Unallocated',
-      status: 'Standby',
-      statusColor: 'bg-gray-100 text-gray-600 border-gray-200',
+      capacityWeightKg: weightKg,
+      capacityVolumeM3: volNum,
+      assignedStore: assignedStore || 'Unallocated',
+      assignedDriver: driverId || null,
+      assignedDriverName: selectedDriverObj ? selectedDriverObj.name : '',
+      odometerKm: Number(odometer) || 0,
+      status: chosenStatus,
       image: vehicleImage
     };
-    setVehicles([...vehicles, newVeh]);
-    closeView();
+
+    try {
+      const created = await createVehicle(apiPayload);
+      const formattedCreated = {
+        ...created,
+        id: created.id || `VH-9${Math.floor(Math.random() * 90) + 10}`,
+        plate: created.registrationNumber || apiPayload.registrationNumber,
+        model: created.model || apiPayload.model,
+        type: created.type || apiPayload.type,
+        payload: payload || (weightKg / 1000).toFixed(1),
+        volume: volume ? `${volume} m³` : 'Standard',
+        store: created.assignedStore || apiPayload.assignedStore,
+        status: created.status || chosenStatus,
+        statusColor: STATUS_STYLE_MAP[created.status || chosenStatus] || STATUS_STYLE_MAP['Available'],
+        image: created.image ?? vehicleImage
+      };
+      setVehicles((prev) => [formattedCreated, ...prev]);
+      closeView();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error creating vehicle');
+    }
   };
 
-  const handleUpdateVehicle = (e) => {
+  const handleUpdateVehicle = async (e) => {
     e.preventDefault();
-    const updated = vehicles.map(v => 
-      v.id === editingVehicle.id 
-        ? { ...v, plate, model: makeModel, type: bodyType, payload: payload, volume: `${volume} m³`, store: assignedStore, status: opStatus, image: vehicleImage }
-        : v
-    );
-    setVehicles(updated);
-    closeView();
+    if (!editingVehicle) return;
+
+    const targetId = editingVehicle.id || editingVehicle._id;
+    const weightKg = Math.round((parseFloat(payload) || 0) * 1000);
+    const volNum = parseFloat(volume) || 0;
+    const selectedDriverObj = drivers.find((d) => String(d._id) === String(driverId));
+
+    const apiUpdate = {
+      registrationNumber: plate.trim().toUpperCase(),
+      vin: vin.trim().toUpperCase(),
+      model: makeModel.trim(),
+      type: bodyType,
+      capacityWeightKg: weightKg,
+      capacityVolumeM3: volNum,
+      assignedStore,
+      assignedDriver: driverId || null,
+      assignedDriverName: selectedDriverObj ? selectedDriverObj.name : '',
+      odometerKm: Number(odometer) || 0,
+      status: opStatus,
+      image: vehicleImage
+    };
+
+    try {
+      const saved = await updateVehicle(targetId, apiUpdate);
+      setVehicles((prev) =>
+        prev.map((v) =>
+          (v._id || v.id) === (editingVehicle._id || editingVehicle.id)
+            ? {
+                ...v,
+                ...saved,
+                plate: saved.registrationNumber || plate,
+                model: saved.model || makeModel,
+                type: saved.type || bodyType,
+                payload: payload || v.payload,
+                volume: volume ? `${volume} m³` : v.volume,
+                store: saved.assignedStore || assignedStore,
+                status: saved.status || opStatus,
+                statusColor: STATUS_STYLE_MAP[saved.status || opStatus] || v.statusColor,
+                image: saved.image ?? vehicleImage
+              }
+            : v
+        )
+      );
+      closeView();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error updating vehicle');
+    }
   };
 
   const handleExportCSV = () => {
     const headers = ['Vehicle ID', 'Registration', 'Model', 'Type', 'Payload', 'Volume', 'Assigned Store', 'Status'];
-    const csvRows = filteredVehicles.map(v => {
+    const csvRows = filteredVehicles.map((v) => {
       return [v.id, `"${v.plate}"`, `"${v.model}"`, `"${v.type}"`, `"${v.payload} Tons"`, `"${v.volume}"`, `"${v.store}"`, `"${v.status}"`].join(',');
     });
     const csvContent = [headers.join(','), ...csvRows].join('\n');
@@ -232,8 +300,8 @@ export default function Vehicles() {
   };
 
   const triggerImageUpload = () => {
-    if(fileInputRef.current) {
-        fileInputRef.current.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -243,7 +311,7 @@ export default function Vehicles() {
     input.accept = 'application/pdf, image/jpeg, image/png';
     input.onchange = (e) => {
       if (e.target.files && e.target.files.length > 0) {
-        alert(`File selected: ${e.target.files[0].name}. (This is a frontend demo)`);
+        alert(`File selected: ${e.target.files[0].name}.`);
       }
     };
     input.click();
@@ -329,6 +397,7 @@ export default function Vehicles() {
                       <option value="Refrigerated Box">Refrigerated Box</option>
                       <option value="Heavy Flatbed">Heavy Flatbed</option>
                       <option value="Dry Freight Van">Dry Freight Van</option>
+                      <option value="Prime Mover">Prime Mover</option>
                     </select>
                     <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                   </div>
@@ -364,9 +433,17 @@ export default function Vehicles() {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><StoreIcon size={14} /></div>
                     <select value={assignedStore} onChange={(e) => setAssignedStore(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-gray-50/50 border border-gray-100 rounded-lg text-xs text-gray-600 outline-none appearance-none" required>
                       <option value="">Select operating facility...</option>
-                      <option value="Colombo Main Store">Colombo Main Store</option>
-                      <option value="Kandy Branch">Kandy Branch</option>
-                      <option value="Galle Warehouse">Galle Warehouse</option>
+                      {stores.length > 0 ? (
+                        stores.map((st) => (
+                          <option key={st._id || st.id} value={st.name}>{st.name}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="Colombo Main Store">Colombo Main Store</option>
+                          <option value="Kandy Regional Depot">Kandy Regional Depot</option>
+                          <option value="Galle Coastal Staging">Galle Coastal Staging</option>
+                        </>
+                      )}
                     </select>
                     <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                   </div>
@@ -390,8 +467,11 @@ export default function Vehicles() {
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">👤</div>
-                    <select value={driver} onChange={(e) => setDriver(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-gray-50/50 border border-gray-100 rounded-lg text-xs text-gray-600 outline-none appearance-none">
+                    <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-gray-50/50 border border-gray-100 rounded-lg text-xs text-gray-600 outline-none appearance-none">
                       <option value="">None / General Pool Vehicle (Unallocated)</option>
+                      {drivers.map((drv) => (
+                        <option key={drv._id} value={drv._id}>{drv.name} ({drv.email})</option>
+                      ))}
                     </select>
                     <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                   </div>
@@ -433,7 +513,6 @@ export default function Vehicles() {
                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest leading-tight text-right">OPTIONAL<br/>PREVIEW</span>
                 </div>
                 
-                {/* Working Image Upload Section for Add View[cite: 55] */}
                 <input 
                   type="file" 
                   ref={fileInputRef} 
@@ -492,7 +571,7 @@ export default function Vehicles() {
                            </div>
                         </div>
                         <button onClick={triggerFileUpload} type="button" className="flex items-center gap-1 text-[9px] font-bold text-gray-600 bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer"><UploadCloud size={10}/> Upload</button>
-                   </div>
+                     </div>
                 </div>
 
                 <div className="mt-5 flex items-start gap-2 text-[9px] text-gray-500 leading-tight">
@@ -514,6 +593,7 @@ export default function Vehicles() {
   }
 
   if (currentView === 'edit' && editingVehicle) {
+    const activeStatusClass = editingVehicle.statusColor || STATUS_STYLE_MAP[opStatus] || STATUS_STYLE_MAP['Available'];
     return (
       <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
         
@@ -527,8 +607,8 @@ export default function Vehicles() {
           <div className="flex items-center gap-4">
             <h1 className="text-[28px] font-extrabold text-[#113b2e] tracking-tight leading-none">Edit Vehicle Details</h1>
             <span className="text-sm font-bold text-gray-800 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm">{editingVehicle.id}</span>
-            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 border ${editingVehicle.statusColor}`}>
-               <span className={`w-1.5 h-1.5 rounded-full ${editingVehicle.statusColor.includes('red') ? 'bg-red-500' : editingVehicle.statusColor.includes('gray') ? 'bg-gray-400' : 'bg-[#0fa979]'}`}></span> {editingVehicle.status}
+            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 border ${activeStatusClass}`}>
+               <span className={`w-1.5 h-1.5 rounded-full ${activeStatusClass.includes('red') ? 'bg-red-500' : activeStatusClass.includes('gray') ? 'bg-gray-400' : 'bg-[#0fa979]'}`}></span> {opStatus || editingVehicle.status}
             </span>
           </div>
           <button onClick={closeView} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 shadow-sm transition-all">
@@ -582,9 +662,17 @@ export default function Vehicles() {
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><StoreIcon size={14} /></div>
                       <select value={assignedStore} onChange={(e) => setAssignedStore(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 outline-none appearance-none" required>
-                        <option value="Colombo Main Store">Colombo Main Store (Western Terminal)</option>
-                        <option value="Kandy Branch">Kandy Branch</option>
-                        <option value="Galle Warehouse">Galle Warehouse</option>
+                        {stores.length > 0 ? (
+                          stores.map((st) => (
+                            <option key={st._id || st.id} value={st.name}>{st.name}</option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="Colombo Main Store">Colombo Main Store (Western Terminal)</option>
+                            <option value="Kandy Regional Depot">Kandy Regional Depot</option>
+                            <option value="Galle Coastal Staging">Galle Coastal Staging</option>
+                          </>
+                        )}
                       </select>
                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                     </div>
@@ -609,17 +697,17 @@ export default function Vehicles() {
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#0d9468]"><Activity size={14} /></div>
                       <select value={opStatus} onChange={(e) => setOpStatus(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 outline-none appearance-none" required>
-                        <option value="Active • En Route">Active — On Route (Transit)</option>
-                        <option value="In Depot • Ready">In Depot — Ready</option>
+                        <option value="Available">Available</option>
+                        <option value="In Transit">In Transit</option>
                         <option value="Maintenance">Maintenance</option>
-                        <option value="Standby">Standby</option>
+                        <option value="Inactive">Inactive</option>
                       </select>
                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                     </div>
                   </div>
 
                   <div>
-                    <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Maximum Net Payload <span className="text-red-500">*</span></span></label>
+                    <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Maximum Net Payload (Tons) <span className="text-red-500">*</span></span></label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><Gauge size={14} /></div>
                       <input type="text" value={payload} onChange={(e) => setPayload(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 outline-none focus:border-[#0fa979]" required/>
@@ -627,11 +715,14 @@ export default function Vehicles() {
                   </div>
                   
                   <div>
-                    <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Primary Assigned Driver <span className="text-red-500">*</span></span></label>
+                    <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Primary Assigned Driver</span></label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#113b2e]">👤</div>
-                      <select className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-[#113b2e] outline-none appearance-none">
-                        <option>Kasun Wickramasinghe (LIC-88219 • Grade A)</option>
+                      <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-[#113b2e] outline-none appearance-none">
+                        <option value="">Unallocated / Pool</option>
+                        {drivers.map((drv) => (
+                          <option key={drv._id} value={drv._id}>{drv.name} ({drv.email})</option>
+                        ))}
                       </select>
                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14} /></div>
                     </div>
@@ -644,7 +735,7 @@ export default function Vehicles() {
                  <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl relative overflow-hidden">
                     <div className="absolute top-3 right-3 text-[#0fa979]"><Edit2 size={12}/></div>
                     <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">ODOMETER READING</div>
-                    <div className="text-xl font-bold text-gray-900 mb-2">142,850 <span className="text-xs text-gray-500 font-medium">km</span></div>
+                    <div className="text-xl font-bold text-gray-900 mb-2">{Number(editingVehicle.odometerKm || 142850).toLocaleString()} <span className="text-xs text-gray-500 font-medium">km</span></div>
                     <div className="text-[9px] text-[#0fa979] font-bold flex items-center gap-1.5 leading-tight"><span className="w-1 h-1 bg-[#0fa979] rounded-full"></span> Sync from CAN-bus<br/>(live)</div>
                  </div>
                  <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl relative overflow-hidden">
@@ -679,7 +770,6 @@ export default function Vehicles() {
 
           <div className="space-y-6">
             
-            {/* Working Edit View Image Upload[cite: 55] */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 relative overflow-hidden">
                <input 
                   type="file" 
@@ -798,7 +888,6 @@ export default function Vehicles() {
           </div>
         </div>
         
-        {/* Fixed Footer Bar Matching the final design request */}
         <div className="max-w-[1200px] mx-auto mt-6 bg-white border border-gray-100 rounded-xl shadow-sm p-4 flex justify-between items-center">
            <div className="flex items-center gap-4 text-[10px] text-gray-400 font-medium">
              <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-[#0fa979] rounded-full"></span> Last synchronized by <span className="font-bold text-gray-700">Nuwan Perera</span> on 24 Feb 2025 at 09:15 IST</div>
@@ -818,9 +907,6 @@ export default function Vehicles() {
     );
   }
 
-  // ----------------------------------------------------
-  // 3. MAIN VEHICLE LIST VIEW
-  // ----------------------------------------------------
   return (
     <div className="bg-[#f8faf9] min-h-full font-sans text-gray-800">
       
@@ -830,9 +916,9 @@ export default function Vehicles() {
             <h1 className="text-2xl font-bold text-[#173F35]">Vehicle Management</h1>
             <div className="flex gap-2">
                <span className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span> Total Vehicles: {vehicles.length}</span>
-               <span className="bg-[#d1f4e0] text-[#0d9468] px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> Active: {vehicles.filter(v => v.status.includes('Active')).length}</span>
-               <span className="bg-red-50 text-red-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 border border-red-100"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Maintenance: {vehicles.filter(v => v.status.includes('Maintenance')).length}</span>
-               <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Standby: {vehicles.filter(v => v.status.includes('Standby')).length}</span>
+               <span className="bg-[#d1f4e0] text-[#0d9468] px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> Active: {vehicles.filter(v => (v.status || '').includes('Active') || v.status === 'In Transit' || v.status === 'Available').length}</span>
+               <span className="bg-red-50 text-red-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 border border-red-100"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Maintenance: {vehicles.filter(v => (v.status || '').includes('Maintenance')).length}</span>
+               <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Standby: {vehicles.filter(v => (v.status || '').includes('Standby') || v.status === 'Inactive').length}</span>
             </div>
           </div>
           <p className="mt-1 text-sm text-[#64748B]">
@@ -856,7 +942,9 @@ export default function Vehicles() {
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative">
           <div className="absolute top-6 right-6 w-8 h-8 rounded-full bg-[#e8f8f2] text-[#0fa979] flex items-center justify-center"><Box size={16}/></div>
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">TOTAL FLEET GROSS CAPACITY</div>
-          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-6 flex items-baseline gap-2">482.5 <span className="text-sm text-gray-500 font-bold">Tons</span></div>
+          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-6 flex items-baseline gap-2">
+            {vehicles.reduce((sum, v) => sum + (parseFloat(v.payload) || 0), 0).toFixed(1)} <span className="text-sm text-gray-500 font-bold">Tons</span>
+          </div>
           
           <div className="flex justify-between items-end mb-1">
              <div className="text-[11px] font-bold text-gray-500">Current Load Utilization</div>
@@ -866,39 +954,46 @@ export default function Vehicles() {
              <div className="h-full bg-[#113b2e] rounded-full w-[86.4%]"></div>
           </div>
           <div className="flex justify-between text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
-             <span>Allocated: 416.8 T</span>
-             <span>Reserve: 65.7 T</span>
+             <span>Allocated: {(vehicles.reduce((sum, v) => sum + (parseFloat(v.payload) || 0), 0) * 0.864).toFixed(1)} T</span>
+             <span>Reserve: {(vehicles.reduce((sum, v) => sum + (parseFloat(v.payload) || 0), 0) * 0.136).toFixed(1)} T</span>
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative">
           <div className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center text-gray-800"><CheckCircle2 size={20}/></div>
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">FLEET AVAILABILITY</div>
-          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-6 flex items-baseline gap-2">83.3% <span className="text-[11px] text-[#0fa979] font-bold uppercase tracking-widest">Ready & Active</span></div>
+          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-6 flex items-baseline gap-2">
+            {vehicles.length > 0
+              ? (((vehicles.filter((v) => !(v.status || '').includes('Maintenance')).length) / vehicles.length) * 100).toFixed(1)
+              : '0.0'}% <span className="text-[11px] text-[#0fa979] font-bold uppercase tracking-widest">Ready & Active</span>
+          </div>
           
           <div className="space-y-2.5 mt-2">
-             <div className="flex justify-between items-center text-[11px]">
-                <div className="flex items-center gap-2 text-gray-600 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> Colombo Main Depot</div>
-                <div className="font-bold text-gray-900">24 / 28 Units</div>
-             </div>
-             <div className="flex justify-between items-center text-[11px]">
-                <div className="flex items-center gap-2 text-gray-600 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]/50"></span> Kandy Branch Hub</div>
-                <div className="font-bold text-gray-900">10 / 12 Units</div>
-             </div>
-             <div className="flex justify-between items-center text-[11px]">
-                <div className="flex items-center gap-2 text-gray-600 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Galle Regional Facility</div>
-                <div className="font-bold text-gray-900">6 / 8 Units</div>
-             </div>
+             {(stores.length > 0
+               ? stores.map((s) => s.name)
+               : ['Colombo Main Store', 'Kandy Regional Depot', 'Galle Coastal Staging']
+             ).map((hubName, idx) => {
+               const hubVehs = vehicles.filter((v) => v.store === hubName);
+               const readyHubVehs = hubVehs.filter((v) => !(v.status || '').includes('Maintenance'));
+               return (
+                 <div key={hubName + idx} className="flex justify-between items-center text-[11px]">
+                   <div className="flex items-center gap-2 text-gray-600 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-[#0fa979]"></span> {hubName}</div>
+                   <div className="font-bold text-gray-900">{readyHubVehs.length} / {hubVehs.length} Units</div>
+                 </div>
+               );
+             })}
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative">
           <div className="absolute top-6 right-6 w-8 h-8 rounded-full bg-red-50 text-red-500 border border-red-100 flex items-center justify-center"><AlertTriangle size={14}/></div>
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">SCHEDULED MAINTENANCE</div>
-          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-6 flex items-baseline gap-2">5 <span className="text-sm text-red-500 font-bold">Pending Inspections</span></div>
+          <div className="text-3xl font-extrabold text-[#113b2e] tracking-tight mb-6 flex items-baseline gap-2">
+            {vehicles.filter((v) => (v.status || '').includes('Maintenance')).length} <span className="text-sm text-red-500 font-bold">Pending Inspections</span>
+          </div>
           
           <div className="bg-red-50/50 border border-red-100 rounded-lg p-3 flex justify-between items-center mb-3">
-             <div className="flex items-center gap-2 text-xs font-bold text-red-600"><AlertTriangle size={14}/> 2 Critical Telemetry Alerts</div>
+             <div className="flex items-center gap-2 text-xs font-bold text-red-600"><AlertTriangle size={14}/> {vehicles.filter((v) => (v.status || '').includes('Maintenance')).length} Critical Telemetry Alerts</div>
              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">BRAKES / OBD-II</div>
           </div>
           
@@ -914,7 +1009,7 @@ export default function Vehicles() {
           <div className="relative flex-1 max-w-[300px]">
             <Search className="absolute left-4 top-2.5 text-gray-400" size={14} />
             <input 
-              type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              type="text" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               placeholder="Filter by plate number, model, ID..." 
               className="w-full pl-10 pr-4 py-2 bg-gray-50 rounded-lg text-xs text-gray-600 outline-none focus:ring-1 focus:ring-[#0fa979]/30 transition-all" 
             />
@@ -922,7 +1017,7 @@ export default function Vehicles() {
           
           <div className="flex gap-2 flex-1 justify-end">
             <div className="relative">
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-medium text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
+              <select value={categoryFilter} onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-medium text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
                 <option value="All Categories">All Categories</option>
                 <option value="Refrigerated Box">Refrigerated Box</option>
                 <option value="Dry Freight Van">Dry Freight Van</option>
@@ -933,19 +1028,28 @@ export default function Vehicles() {
             </div>
 
             <div className="relative">
-              <select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-medium text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
+              <select value={storeFilter} onChange={(e) => { setStoreFilter(e.target.value); setCurrentPage(1); }} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-medium text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
                 <option value="All Stores">All Stores</option>
-                <option value="Colombo Main Store">Colombo Main Store</option>
-                <option value="Kandy Branch">Kandy Branch</option>
-                <option value="Galle Warehouse">Galle Warehouse</option>
+                {stores.length > 0 ? (
+                  stores.map((st) => (
+                    <option key={st._id || st.id} value={st.name}>{st.name}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Colombo Main Store">Colombo Main Store</option>
+                    <option value="Kandy Regional Depot">Kandy Regional Depot</option>
+                    <option value="Galle Coastal Staging">Galle Coastal Staging</option>
+                  </>
+                )}
               </select>
               <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={14}/></div>
             </div>
 
             <div className="relative">
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-medium text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
+              <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="appearance-none bg-gray-50 border border-transparent rounded-lg pl-4 pr-10 py-2 text-xs font-medium text-gray-700 outline-none cursor-pointer min-w-[140px] hover:bg-gray-100 transition-colors">
                 <option value="All Statuses">All Statuses</option>
                 <option value="Active">Active</option>
+                <option value="Available">Available</option>
                 <option value="Ready">Ready</option>
                 <option value="Maintenance">Maintenance</option>
                 <option value="Standby">Standby</option>
@@ -974,70 +1078,86 @@ export default function Vehicles() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {filteredVehicles.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan="7" className="py-10 text-center text-gray-500 text-xs">Loading vehicles...</td></tr>
+            ) : paginatedVehicles.length === 0 ? (
               <tr><td colSpan="7" className="py-10 text-center text-gray-500 text-xs">No vehicles found.</td></tr>
             ) : (
-              filteredVehicles.map((v) => (
-                <tr key={v.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="py-5 px-6">
-                    <span className="font-bold text-gray-700 bg-gray-100/80 px-2 py-1 rounded text-xs tracking-wide">{v.id}</span>
-                  </td>
-                  <td className="py-5 px-6">
-                    <div className="font-bold text-[#113b2e] text-sm mb-0.5 tracking-wide">{v.plate}</div>
-                    <div className="text-gray-500 text-[11px]">{v.model}</div>
-                  </td>
-                  <td className="py-5 px-6">
-                    <span className="bg-[#e8f8f2] text-[#113b2e] text-[11px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 w-fit border border-[#0fa979]/20">
-                       <Snowflake size={12} className="text-[#0fa979]"/> {v.type}
-                    </span>
-                  </td>
-                  <td className="py-5 px-6 text-xs">
-                     <span className="font-bold text-gray-700">{v.payload} Tons</span> <span className="text-gray-300 mx-1">•</span> <span className="text-gray-500">{v.volume}</span>
-                  </td>
-                  <td className="py-5 px-6">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                      <StoreIcon size={14} className="text-gray-400"/> {v.store}
-                    </div>
-                  </td>
-                  <td className="py-5 px-6">
-                    <span className={`px-3 py-1.5 text-[10px] font-bold rounded-full inline-flex items-center gap-1.5 border ${v.statusColor}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${v.statusColor.includes('red') ? 'bg-red-500' : v.statusColor.includes('gray') ? 'bg-gray-400' : 'bg-[#0fa979]'}`}></span> {v.status}
-                    </span>
-                  </td>
-                  <td className="py-5 px-6 text-center">
-                    <div className="flex justify-center gap-4 text-gray-500">
-                      <button onClick={() => openEditVehicle(v)} className="hover:text-[#113b2e] transition-colors p-1 cursor-pointer"><Edit2 size={16}/></button>
-                      <button onClick={() => handleDelete(v.id)} className="hover:text-red-500 transition-colors p-1 cursor-pointer"><Trash2 size={16}/></button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              paginatedVehicles.map((v) => {
+                const badgeClass = v.statusColor || STATUS_STYLE_MAP[v.status] || STATUS_STYLE_MAP['Available'];
+                return (
+                  <tr key={v._id || v.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-5 px-6">
+                      <span className="font-bold text-gray-700 bg-gray-100/80 px-2 py-1 rounded text-xs tracking-wide">{v.id}</span>
+                    </td>
+                    <td className="py-5 px-6">
+                      <div className="font-bold text-[#113b2e] text-sm mb-0.5 tracking-wide">{v.plate}</div>
+                      <div className="text-gray-500 text-[11px]">{v.model}</div>
+                    </td>
+                    <td className="py-5 px-6">
+                      <span className="bg-[#e8f8f2] text-[#113b2e] text-[11px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 w-fit border border-[#0fa979]/20">
+                         <Snowflake size={12} className="text-[#0fa979]"/> {v.type}
+                      </span>
+                    </td>
+                    <td className="py-5 px-6 text-xs">
+                       <span className="font-bold text-gray-700">{v.payload} Tons</span> <span className="text-gray-300 mx-1">•</span> <span className="text-gray-500">{v.volume}</span>
+                    </td>
+                    <td className="py-5 px-6">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+                        <StoreIcon size={14} className="text-gray-400"/> {v.store}
+                      </div>
+                    </td>
+                    <td className="py-5 px-6">
+                      <span className={`px-3 py-1.5 text-[10px] font-bold rounded-full inline-flex items-center gap-1.5 border ${badgeClass}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${badgeClass.includes('red') ? 'bg-red-500' : badgeClass.includes('gray') ? 'bg-gray-400' : 'bg-[#0fa979]'}`}></span> {v.status}
+                      </span>
+                    </td>
+                    <td className="py-5 px-6 text-center">
+                      <div className="flex justify-center gap-4 text-gray-500">
+                        <button type="button" onClick={() => openEditVehicle(v)} className="hover:text-[#113b2e] transition-colors p-1 cursor-pointer"><Edit2 size={16}/></button>
+                        <button type="button" onClick={() => handleDelete(v)} className="hover:text-red-500 transition-colors p-1 cursor-pointer"><Trash2 size={16}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
 
         <div className="px-6 py-4 flex justify-between items-center border-t border-gray-100">
           <div className="flex items-center gap-3 text-xs text-gray-500 font-medium">
-             <span>Showing 1 - {filteredVehicles.length} of {vehicles.length} vehicles</span>
+             <span>
+               Showing {filteredVehicles.length === 0 ? 0 : (safePage - 1) * rowsPerPage + 1} - {Math.min(safePage * rowsPerPage, filteredVehicles.length)} of {filteredVehicles.length} vehicles
+             </span>
              <div className="flex items-center gap-1.5">
                 Rows per page: 
-                <select className="bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 outline-none font-bold text-gray-700">
-                  <option>8</option>
-                  <option>16</option>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 outline-none font-bold text-gray-700"
+                >
+                  <option value={8}>8</option>
+                  <option value={16}>16</option>
                 </select>
              </div>
           </div>
           
           <div className="flex items-center gap-1 text-xs font-bold text-gray-500">
-             <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50 text-gray-300">|&lt;</button>
-             <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50 text-gray-400">&lt;</button>
-             <button className="w-7 h-7 rounded bg-[#113b2e] text-white flex items-center justify-center">1</button>
-             <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50">2</button>
-             <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50">3</button>
-             <span>...</span>
-             <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50">6</button>
-             <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50">&gt;</button>
-             <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50">&gt;|</button>
+             <button type="button" onClick={() => setCurrentPage(1)} disabled={safePage === 1} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50 disabled:text-gray-300">|&lt;</button>
+             <button type="button" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50 disabled:text-gray-300">&lt;</button>
+             {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+               <button
+                 key={pageNum}
+                 type="button"
+                 onClick={() => setCurrentPage(pageNum)}
+                 className={`w-7 h-7 rounded flex items-center justify-center ${safePage === pageNum ? 'bg-[#113b2e] text-white' : 'hover:bg-gray-50'}`}
+               >
+                 {pageNum}
+               </button>
+             ))}
+             <button type="button" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50 disabled:text-gray-300">&gt;</button>
+             <button type="button" onClick={() => setCurrentPage(totalPages)} disabled={safePage === totalPages} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-50 disabled:text-gray-300">&gt;|</button>
           </div>
         </div>
       </div>
