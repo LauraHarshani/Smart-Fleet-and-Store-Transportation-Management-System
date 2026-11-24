@@ -11,6 +11,7 @@ const userRoutes = require("./routes/userRoutes");
 const storeRoutes = require("./routes/storeRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
 const itemRoutes = require("./routes/itemRoutes");
+const bookingRoutes = require("./routes/bookingRoutes");
 const auditRoutes = require("./routes/auditRoutes");   // BE-10
 const reportRoutes = require("./routes/reportRoutes"); // BE-11
 
@@ -39,14 +40,20 @@ app.use("/api/users", userRoutes);
 app.use("/api/stores", storeRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/items", itemRoutes);
+app.use("/api/bookings", bookingRoutes);
 app.use("/api/audit-logs", auditRoutes); // BE-10
 app.use("/api/reports", reportRoutes);   // BE-11
 
 app.get("/", (req, res) => res.send("Smart Fleet API is running..."));
 
-// Connect to MongoDB
-connectDB();
-
-app.listen(PORT, () => {
-    console.log(`Server is running on port: ${PORT}`);
-});
+// Only accept traffic after MongoDB is ready.
+connectDB()
+    .then(() => {
+        app.listen(PORT, () => {
+            console.log(`Server is running on port: ${PORT}`);
+        });
+    })
+    .catch((error) => {
+        console.error(`Unable to start server: ${error.message}`);
+        process.exit(1);
+    });

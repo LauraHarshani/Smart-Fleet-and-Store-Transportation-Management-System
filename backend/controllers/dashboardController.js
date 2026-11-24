@@ -35,22 +35,6 @@ const getTodayRange = () => {
     };
 };
 
-// Get the start of the current week (Monday) in Sri Lanka
-const getCurrentWeekStart = () => {
-    const now = getColomboDate();
-
-    const day = now.getUTCDay();
-    const daysSinceMonday = (day + 6) % 7;
-
-    const monday = new Date(Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() - daysSinceMonday
-    ));
-
-    return colomboDateToUTC(monday);
-};
-
 // --------------------------------------------------
 // 1. DASHBOARD KPI CARDS
 // --------------------------------------------------
@@ -333,12 +317,6 @@ const getMonthlyTripSummary = async (req, res) => {
     try {
         const now = getColomboDate();
 
-        const currentMonthStart = new Date(Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCMonth(),
-            1
-        ));
-
         const firstMonth = new Date(Date.UTC(
             now.getUTCFullYear(),
             now.getUTCMonth() - 5,
@@ -422,13 +400,18 @@ const getMonthlyTripSummary = async (req, res) => {
 
 const getUpcomingTrips = async (req, res) => {
     try {
-        const { end } = getTodayRange();
+        const { start, end } = getTodayRange();
+        const localNow = getColomboDate();
+        const currentTime = `${String(localNow.getUTCHours()).padStart(2, '0')}:${String(localNow.getUTCMinutes()).padStart(2, '0')}`;
 
         const trips = await Trip.find({
-            date: { $gte: end },
-            status: { $nin: ["Cancelled", "Completed"] }
+            status: { $nin: ["Cancelled", "Completed"] },
+            $or: [
+                { date: { $gte: end } },
+                { date: { $gte: start, $lt: end }, start: { $gte: currentTime } }
+            ]
         })
-            .sort({ date: 1 })
+            .sort({ date: 1, start: 1 })
             .limit(10)
             .select(
                 "id route origin destination date start end vehicle driver status"

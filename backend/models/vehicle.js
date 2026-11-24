@@ -1,21 +1,23 @@
 const mongoose = require('mongoose');
 
-// Define the schema for Vehicle Management based on SRS and Frontend requirements
 const vehicleSchema = new mongoose.Schema({
-    id: { type: String, required: true, unique: true }, // e.g., VH-401
-    plate: { type: String, required: true }, // Registration Plate (e.g., WP-CAB-8492)
-    vin: { type: String, required: true }, // Chassis / VIN Number
-    model: { type: String, required: true }, // Make & Model (e.g., Isuzu Forward)
-    type: { type: String, required: true }, // Body Type (e.g., Refrigerated Box, Dry Freight Van)
-    payload: { type: String, required: true }, // Maximum Net Payload in Tons
-    volume: { type: String, required: true }, // Cargo Volume Capacity
-    store: { type: String, required: true }, // Assigned Store / Hub
-    odometer: { type: String, required: true }, // Initial Odometer Reading
-    driver: { type: String, default: 'Unallocated' }, // Assigned Driver
-    status: { type: String, default: 'Standby' }, // e.g., Active, Maintenance, Standby
-    image: { type: String, default: null } // Vehicle Image URL or Base64 string
-}, {
-    timestamps: true // Automatically adds createdAt and updatedAt
-});
+  id: { type: String, unique: true, sparse: true },
+  registrationNumber: { type: String, required: true, unique: true, trim: true },
+  vin: { type: String, default: '', trim: true },
+  model: { type: String, required: true, trim: true },
+  type: { type: String, required: true, trim: true },
+  capacityWeightKg: { type: Number, required: true, min: 0 },
+  capacityVolumeM3: { type: Number, required: true, min: 0 },
+  assignedStore: { type: String, default: 'Colombo Main Store', trim: true },
+  assignedDriver: { type: mongoose.Schema.Types.ObjectId, ref: 'authUsers', default: null },
+  assignedDriverName: { type: String, default: '', trim: true },
+  odometerKm: { type: Number, default: 0, min: 0 },
+  status: {
+    type: String,
+    enum: ['Available', 'In Transit', 'Maintenance', 'Inactive'],
+    default: 'Available'
+  },
+  image: { type: String, default: null }
+}, { timestamps: true });
 
-module.exports = mongoose.model('Vehicle', vehicleSchema);
+module.exports = mongoose.models.Vehicle || mongoose.model('Vehicle', vehicleSchema);
