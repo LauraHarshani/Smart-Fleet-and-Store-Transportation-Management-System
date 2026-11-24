@@ -85,4 +85,34 @@ const createBooking = async (req, res) => {
   }
 };
 
-module.exports = { createBooking };
+const cancelBooking = async (req, res) => {
+  try {
+    const result = await cancelBookingService(req.params.id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Booking cancelled successfully.",
+      booking: result.booking,
+      trip: result.trip
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    console.error("cancelBooking error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Error cancelling booking."
+    });
+  }
+};
+
+module.exports = {
+  createBooking,
+  cancelBooking
+};
