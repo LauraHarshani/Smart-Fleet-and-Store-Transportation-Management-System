@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
+require('./User');
 
 const vehicleSchema = new mongoose.Schema({
   id: { type: String, unique: true, sparse: true },
@@ -9,7 +10,7 @@ const vehicleSchema = new mongoose.Schema({
   capacityWeightKg: { type: Number, required: true, min: 0 },
   capacityVolumeM3: { type: Number, required: true, min: 0 },
   assignedStore: { type: String, default: 'Colombo Main Store', trim: true },
-  assignedDriver: { type: mongoose.Schema.Types.ObjectId, ref: 'authUsers', default: null },
+  assignedDriver: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   assignedDriverName: { type: String, default: '', trim: true },
   odometerKm: { type: Number, default: 0, min: 0 },
   status: {
