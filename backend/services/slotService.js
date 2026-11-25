@@ -1,10 +1,15 @@
+
 const mongoose = require("mongoose");
 
 const StoreSlot = require("../models/StoreSlot");
 const Store = require("../models/store");
 const Trip = require("../models/trip");
 
-// Create a consistent error that the controller can handle
+const {
+  checkSlotAvailability,
+} = require("./conflictDetectionService");
+
+// Create a consistent error
 const createError = (message, statusCode = 400) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -43,7 +48,6 @@ const createSlot = async (slotData) => {
     notes,
   } = slotData;
 
-  // Check required fields
   if (
     !store ||
     !trip ||
@@ -56,7 +60,7 @@ const createSlot = async (slotData) => {
     throw createError("Please provide all required reservation details.");
   }
 
-  // Validate MongoDB IDs
+  //// Validate MongoDB IDs
   if (
     !mongoose.Types.ObjectId.isValid(store) ||
     !mongoose.Types.ObjectId.isValid(trip) ||
@@ -67,9 +71,9 @@ const createSlot = async (slotData) => {
 
   const { start, end } = validateSlotTime(startAt, endAt);
 
-  // Check whether the store exists
   const existingStore = await Store.findById(store);
 
+  // Check whether the store exists
   if (!existingStore) {
     throw createError("Store not found.", 404);
   }
@@ -88,7 +92,13 @@ const createSlot = async (slotData) => {
     throw createError("The selected stop does not belong to this trip.");
   }
 
-  // Create reservation
+  // Check operating hours and dock availability
+  await checkSlotAvailability({
+    storeId: store,
+    startAt: start,
+    endAt: end,
+  });
+
   const newSlot = await StoreSlot.create({
     store,
     trip,
@@ -107,21 +117,10 @@ const createSlot = async (slotData) => {
 const getSlots = async (filters = {}) => {
   const query = {};
 
-  if (filters.store) {
-    query.store = filters.store;
-  }
-
-  if (filters.trip) {
-    query.trip = filters.trip;
-  }
-
-  if (filters.status) {
-    query.status = filters.status;
-  }
-
-  if (filters.vehicle) {
-    query.vehicle = filters.vehicle;
-  }
+  if (filters.store) query.store = filters.store;
+  if (filters.trip) query.trip = filters.trip;
+  if (filters.status) query.status = filters.status;
+  if (filters.vehicle) query.vehicle = filters.vehicle;
 
   if (filters.startDate || filters.endDate) {
     query.startAt = {};
@@ -143,6 +142,10 @@ const getSlots = async (filters = {}) => {
 
 // GET A SINGLE SLOT
 const getSlotById = async (slotId) => {
+  if (!mongoose.Types.ObjectId.isValid(slotId)) {
+    throw createError("Invalid slot ID.");
+  }
+
   const slot = await StoreSlot.findById(slotId)
     .populate("store", "name code")
     .populate("trip", "id route status");
@@ -156,19 +159,22 @@ const getSlotById = async (slotId) => {
 
 // UPDATE SLOT RESERVATION
 const updateSlot = async (slotId, updateData) => {
+  if (!mongoose.Types.ObjectId.isValid(slotId)) {
+    throw createError("Invalid slot ID.");
+  }
+
   const slot = await StoreSlot.findById(slotId);
 
   if (!slot) {
     throw createError("Slot reservation not found.", 404);
   }
 
-  if (slot.status === "Cancelled" || slot.status === "Completed") {
+  if (["Cancelled", "Completed"].includes(slot.status)) {
     throw createError(
       "Cancelled or completed reservations cannot be updated."
     );
   }
 
-  // Only allow these fields to be updated
   const allowedFields = [
     "vehicle",
     "operationType",
@@ -183,15 +189,18 @@ const updateSlot = async (slotId, updateData) => {
     }
   });
 
-  // Validate the final time interval
-  validateSlotTime(slot.startAt, slot.endAt);
+  const { start, end } = validateSlotTime(
+    slot.startAt,
+    slot.endAt
+  );
 
+  // Exclude this reservation from the conflict check
   await checkSlotAvailability({
-  storeId: slot.store,
-  startAt: slot.startAt,
-  endAt: slot.endAt,
-  excludeSlotId: slot._id,
-});
+    storeId: slot.store,
+    startAt: start,
+    endAt: end,
+    excludeSlotId: slot._id,
+  });
 
   await slot.save();
 
@@ -200,6 +209,10 @@ const updateSlot = async (slotId, updateData) => {
 
 // CANCEL SLOT RESERVATION
 const cancelSlot = async (slotId) => {
+  if (!mongoose.Types.ObjectId.isValid(slotId)) {
+    throw createError("Invalid slot ID.");
+  }
+
   const slot = await StoreSlot.findById(slotId);
 
   if (!slot) {
