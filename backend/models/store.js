@@ -22,6 +22,7 @@ const storeSchema = new mongoose.Schema({
   rules: { type: String, default: '' },
   capacity: { type: String, default: '0 MT' },
   docks: { type: Number, default: 4, min: 1 },
+  slotReservationRevision: { type: Number, default: 0, select: false },
   utilization: { type: Number, default: 0, min: 0, max: 100 },
   status: { type: String, default: 'Active' },
   operationalClass: { type: String, default: 'Standard Transit Depot' },
