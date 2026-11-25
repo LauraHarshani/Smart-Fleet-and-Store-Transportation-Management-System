@@ -7,6 +7,15 @@ const createError = (message, statusCode = 400) => {
   return error;
 };
 
+const lockStoreReservations = async (storeId, session) => {
+  const result = await Store.updateOne(
+    { _id: storeId },
+    { $inc: { slotReservationRevision: 1 } },
+    { session }
+  );
+  if (!result.matchedCount) throw createError("Store not found.", 404);
+};
+
 // Convert a date into minutes after midnight in Sri Lanka time
 const getSriLankaMinutes = (date) => {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -99,6 +108,7 @@ const checkDockAvailability = async ({
   startAt,
   endAt,
   excludeSlotId = null,
+  session = null,
 }) => {
   const query = {
     store: storeId,
@@ -112,9 +122,9 @@ const checkDockAvailability = async ({
     query._id = { $ne: excludeSlotId };
   }
 
-  const existingSlots = await StoreSlot.find(query)
-    .select("startAt endAt")
-    .lean();
+  let existingQuery = StoreSlot.find(query).select("startAt endAt").lean();
+  if (session) existingQuery = existingQuery.session(session);
+  const existingSlots = await existingQuery;
 
   const events = [
     { time: new Date(startAt).getTime(), change: 1 },
@@ -178,6 +188,7 @@ const checkSlotAvailability = async ({
   startAt,
   endAt,
   excludeSlotId = null,
+  session = null,
 }) => {
   const start = new Date(startAt);
   const end = new Date(endAt);
@@ -190,7 +201,9 @@ const checkSlotAvailability = async ({
     throw createError("Invalid reservation start or end time.");
   }
 
-  const store = await Store.findById(storeId);
+  let storeQuery = Store.findById(storeId);
+  if (session) storeQuery = storeQuery.session(session);
+  const store = await storeQuery;
 
   if (!store) {
     throw createError("Store not found.", 404);
@@ -203,6 +216,7 @@ const checkSlotAvailability = async ({
     startAt: start,
     endAt: end,
     excludeSlotId,
+    session,
   });
 
   if (!dockResult.available) {
@@ -216,8 +230,67 @@ const checkSlotAvailability = async ({
   };
 };
 
+// Validate a batch of proposed reservations as one schedule. Existing reservations
+// being replaced by this batch are excluded, then dock occupancy is simulated
+// across the complete set so multiple docks can be used correctly.
+const checkSlotScheduleAvailability = async ({ proposedSlots, replacedSlotIds = [], session }) => {
+  const groups = new Map();
+
+  for (const proposed of proposedSlots) {
+    const storeId = proposed.store.toString();
+    const store = await Store.findById(storeId).session(session || null);
+    if (!store) throw createError("Store not found.", 404);
+    checkOperatingHours(store, proposed.startAt, proposed.endAt);
+    if (!groups.has(storeId)) groups.set(storeId, { store, slots: [] });
+    groups.get(storeId).slots.push(proposed);
+  }
+
+  for (const [storeId, group] of groups) {
+    const startAt = new Date(Math.min(...group.slots.map((slot) => slot.startAt.getTime())));
+    const endAt = new Date(Math.max(...group.slots.map((slot) => slot.endAt.getTime())));
+    const query = {
+      store: storeId,
+      status: { $in: ["Reserved", "Confirmed", "Rescheduled"] },
+      startAt: { $lt: endAt },
+      endAt: { $gt: startAt },
+    };
+    if (replacedSlotIds.length) query._id = { $nin: replacedSlotIds };
+
+    let existingQuery = StoreSlot.find(query).select("startAt endAt").lean();
+    if (session) existingQuery = existingQuery.session(session);
+    const existingSlots = await existingQuery;
+    const events = [];
+    for (const slot of existingSlots) {
+      events.push(
+        { time: new Date(slot.startAt).getTime(), change: 1 },
+        { time: new Date(slot.endAt).getTime(), change: -1 }
+      );
+    }
+    for (const slot of group.slots) {
+      events.push(
+        { time: slot.startAt.getTime(), change: 1 },
+        { time: slot.endAt.getTime(), change: -1 }
+      );
+    }
+    events.sort((a, b) => a.time - b.time || a.change - b.change);
+
+    const dockCapacity = getDockCapacity(group.store);
+    let occupiedDocks = 0;
+    for (const event of events) {
+      occupiedDocks += event.change;
+      if (occupiedDocks > dockCapacity) {
+        throw createError(`All ${dockCapacity} docks are occupied during the proposed schedule.`, 409);
+      }
+    }
+  }
+
+  return { available: true };
+};
+
 module.exports = {
   checkSlotAvailability,
+  checkSlotScheduleAvailability,
   checkOperatingHours,
   checkDockAvailability,
+  lockStoreReservations,
 };
