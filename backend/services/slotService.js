@@ -7,6 +7,7 @@ const Trip = require("../models/trip");
 
 const {
   checkSlotAvailability,
+  lockStoreReservations,
 } = require("./conflictDetectionService");
 
 // Create a consistent error
@@ -71,45 +72,36 @@ const createSlot = async (slotData) => {
 
   const { start, end } = validateSlotTime(startAt, endAt);
 
-  const existingStore = await Store.findById(store);
+  const session = await mongoose.startSession();
+  let newSlot;
+  try {
+    await session.withTransaction(async () => {
+      const existingStore = await Store.findById(store).session(session);
+      if (!existingStore) throw createError("Store not found.", 404);
 
-  // Check whether the store exists
-  if (!existingStore) {
-    throw createError("Store not found.", 404);
+      const existingTrip = await Trip.findById(trip).session(session);
+      if (!existingTrip) throw createError("Trip not found.", 404);
+      if (!existingTrip.stops.id(stopId)) {
+        throw createError("The selected stop does not belong to this trip.");
+      }
+
+      await lockStoreReservations(store, session);
+      await checkSlotAvailability({ storeId: store, startAt: start, endAt: end, session });
+
+      [newSlot] = await StoreSlot.create([{
+        store,
+        trip,
+        stopId,
+        vehicle: vehicle.trim(),
+        operationType,
+        startAt: start,
+        endAt: end,
+        notes: notes || "",
+      }], { session });
+    });
+  } finally {
+    await session.endSession();
   }
-
-  // Check whether the trip exists
-  const existingTrip = await Trip.findById(trip);
-
-  if (!existingTrip) {
-    throw createError("Trip not found.", 404);
-  }
-
-  // Check whether the stop belongs to this trip
-  const existingStop = existingTrip.stops.id(stopId);
-
-  if (!existingStop) {
-    throw createError("The selected stop does not belong to this trip.");
-  }
-
-  // Check operating hours and dock availability
-  await checkSlotAvailability({
-    storeId: store,
-    startAt: start,
-    endAt: end,
-  });
-
-  const newSlot = await StoreSlot.create({
-    store,
-    trip,
-    stopId,
-    vehicle: vehicle.trim(),
-    operationType,
-    startAt: start,
-    endAt: end,
-    notes: notes || "",
-  });
-
   return newSlot;
 };
 
@@ -163,48 +155,37 @@ const updateSlot = async (slotId, updateData) => {
     throw createError("Invalid slot ID.");
   }
 
-  const slot = await StoreSlot.findById(slotId);
+  const session = await mongoose.startSession();
+  let updatedSlot;
+  try {
+    await session.withTransaction(async () => {
+      const slot = await StoreSlot.findById(slotId).session(session);
+      if (!slot) throw createError("Slot reservation not found.", 404);
+      if (["Cancelled", "Completed"].includes(slot.status)) {
+        throw createError("Cancelled or completed reservations cannot be updated.");
+      }
 
-  if (!slot) {
-    throw createError("Slot reservation not found.", 404);
+      await lockStoreReservations(slot.store, session);
+      const allowedFields = ["vehicle", "operationType", "startAt", "endAt", "notes"];
+      allowedFields.forEach((field) => {
+        if (updateData[field] !== undefined) slot[field] = updateData[field];
+      });
+
+      const { start, end } = validateSlotTime(slot.startAt, slot.endAt);
+      await checkSlotAvailability({
+        storeId: slot.store,
+        startAt: start,
+        endAt: end,
+        excludeSlotId: slot._id,
+        session,
+      });
+      await slot.save({ session });
+      updatedSlot = slot;
+    });
+  } finally {
+    await session.endSession();
   }
-
-  if (["Cancelled", "Completed"].includes(slot.status)) {
-    throw createError(
-      "Cancelled or completed reservations cannot be updated."
-    );
-  }
-
-  const allowedFields = [
-    "vehicle",
-    "operationType",
-    "startAt",
-    "endAt",
-    "notes",
-  ];
-
-  allowedFields.forEach((field) => {
-    if (updateData[field] !== undefined) {
-      slot[field] = updateData[field];
-    }
-  });
-
-  const { start, end } = validateSlotTime(
-    slot.startAt,
-    slot.endAt
-  );
-
-  // Exclude this reservation from the conflict check
-  await checkSlotAvailability({
-    storeId: slot.store,
-    startAt: start,
-    endAt: end,
-    excludeSlotId: slot._id,
-  });
-
-  await slot.save();
-
-  return slot;
+  return updatedSlot;
 };
 
 // CANCEL SLOT RESERVATION

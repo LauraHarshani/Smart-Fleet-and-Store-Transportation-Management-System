@@ -2,7 +2,7 @@ const express = require('express');
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 const { auditMutation } = require('../middleware/auditMutationMiddleware');
-const { createTrip } = require('../controllers/tripController');
+const { createTrip, reportTripDelay } = require('../controllers/tripController');
 
 const router = express.Router();
 
@@ -10,5 +10,6 @@ router.use(protect, allowRoles('ADMIN'), auditMutation);
 
 router.post('/add', createTrip);
 router.post('/', createTrip);
+router.patch('/:id/delay', reportTripDelay);
 
 module.exports = router;

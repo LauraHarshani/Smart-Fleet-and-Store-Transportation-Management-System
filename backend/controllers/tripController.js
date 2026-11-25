@@ -1,6 +1,28 @@
 const mongoose = require('mongoose');
 const Trip = require('../models/trip');
 const Booking = require('../models/booking');
+const { rescheduleTripSlots } = require('../services/reschedulingService');
+
+const reportTripDelay = async (req, res) => {
+  const delayMinutes = Number(req.body?.delayMinutes);
+  if (!Number.isFinite(delayMinutes) || delayMinutes <= 0) {
+    return res.status(400).json({ success: false, message: 'delayMinutes must be a positive number.' });
+  }
+
+  try {
+    const result = await rescheduleTripSlots(req.params.id, delayMinutes);
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    if (error.name === 'ValidationError' || error.name === 'CastError') {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    console.error('reportTripDelay error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to report trip delay.' });
+  }
+};
 
 const createTrip = async (req, res) => {
   try {
@@ -111,4 +133,4 @@ const createTrip = async (req, res) => {
   }
 };
 
-module.exports = { createTrip };
+module.exports = { createTrip, reportTripDelay };

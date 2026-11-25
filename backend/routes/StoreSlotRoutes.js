@@ -1,3 +1,4 @@
+
 const express = require("express");
 const router = express.Router();
 
@@ -11,10 +12,15 @@ const {
 
 const { protect } = require("../middleware/authMiddleware");
 const { allowRoles } = require("../middleware/roleMiddleware");
+const { storeScope } = require("../middleware/storeScopeMiddleware");
 
 router.use(protect);
 
-router.use(allowRoles("ADMIN", "STORE_MANAGER", "STORE_EMPLOYEE"));
+router.use(
+  allowRoles("ADMIN", "STORE MANAGER", "STORE EMPLOYEE")
+);
+
+router.use(storeScope);
 
 // Create a reservation
 router.post("/", createSlot);
