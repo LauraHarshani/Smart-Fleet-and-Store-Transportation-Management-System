@@ -1,5 +1,9 @@
 const Booking = require('../models/booking');
 
+const {
+  cancelBooking: cancelBookingService
+} = require("../services/cancellationService");
+
 const createBooking = async (req, res) => {
   const payload = req.body;
 
