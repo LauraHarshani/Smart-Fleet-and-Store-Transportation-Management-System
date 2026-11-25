@@ -18,11 +18,42 @@ const parseCoordinates = (value) => {
   return { lat, lng };
 };
 
+const normalizeTime = (value) => {
+  if (typeof value !== 'string') return null;
+  const time = value.trim();
+  const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = match[3]?.toUpperCase();
+  if (minute > 59 || (meridiem && (hour < 1 || hour > 12)) || (!meridiem && hour > 23)) return null;
+  if (meridiem) hour = (hour % 12) + (meridiem === 'PM' ? 12 : 0);
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+};
+
+const normalizeStoreHours = (value, payload) => {
+  const times = String(payload.hours ?? value.hours ?? '').match(/\d{1,2}:\d{2}\s*(?:AM|PM)?/gi) || [];
+  const payloadHasHours = Object.prototype.hasOwnProperty.call(payload, 'hours');
+  const explicitOpen = normalizeTime(payload.operatingHours?.open);
+  const explicitClose = normalizeTime(payload.operatingHours?.close);
+  const open = explicitOpen || (payloadHasHours ? normalizeTime(times[0]) : null) || normalizeTime(value.operatingHours?.open) || '08:00';
+  const close = explicitClose || (payloadHasHours ? normalizeTime(times[1]) : null) || normalizeTime(value.operatingHours?.close) || '17:00';
+  return { open, close };
+};
+
+const normalizeDockCount = (value) => {
+  if (value === undefined || value === null || value === '') return 4;
+  // Accept legacy display values such as "4 Active Docks" while storing a number.
+  const match = String(value).trim().match(/^(\d+)\s*(?:active\s+docks?)?$/i);
+  return match ? Number(match[1]) : Number.NaN;
+};
+
 const normalizeStorePayload = (payload, existing = {}) => {
   const value = { ...existing, ...payload };
   const coordinates = parseCoordinates(value.coordinates) || value.location;
   const hours = value.hours || '';
-  const [open = '', close = ''] = hours.split(/\s+-\s+/, 2).map((part) => part.trim());
+  const operatingHours = normalizeStoreHours(value, payload);
   const code = value.code || value.id || `ST-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
   return {
@@ -36,17 +67,14 @@ const normalizeStorePayload = (payload, existing = {}) => {
     },
     address: value.address || value.location?.address || '',
     coordinates: value.coordinates || (coordinates ? `${coordinates.lat}, ${coordinates.lng}` : ''),
-    operatingHours: {
-      open: value.operatingHours?.open || open || '08:00',
-      close: value.operatingHours?.close || close || '17:00',
-    },
-    hours: value.hours || `${open || '08:00'} - ${close || '17:00'}`,
+    operatingHours,
+    hours: value.hours || `${operatingHours.open} - ${operatingHours.close}`,
     region: value.region || '',
     subRegion: value.subRegion || '',
     phone: value.phone || '',
     rules: value.rules || '',
     capacity: value.capacity || '0 MT',
-    docks: value.docks || '4 Active Docks',
+    docks: normalizeDockCount(value.docks),
     utilization: Number(value.utilization) || 0,
     status: value.status || 'Active',
     operationalClass: value.operationalClass || 'Standard Transit Depot',
@@ -108,7 +136,7 @@ const createStore = async (req, res) => {
     res.status(201).json({ message: 'Store created successfully', store: enriched });
   } catch (error) {
     if (error.code === 11000) return res.status(409).json({ message: 'Store name or code already exists' });
-    if (error.name === 'ValidationError') return res.status(400).json({ message: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: error.message });
     res.status(500).json({ message: 'Error creating store', error: error.message });
   }
 };
@@ -130,7 +158,7 @@ const updateStore = async (req, res) => {
     res.status(200).json({ message: 'Store updated successfully', store: enriched });
   } catch (error) {
     if (error.code === 11000) return res.status(409).json({ message: 'Store name or code already exists' });
-    if (error.name === 'ValidationError') return res.status(400).json({ message: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: error.message });
     res.status(500).json({ message: 'Error updating store', error: error.message });
   }
 };
