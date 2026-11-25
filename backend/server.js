@@ -12,10 +12,11 @@ const storeRoutes = require("./routes/storeRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
 const itemRoutes = require("./routes/itemRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
+const storeBookingRoutes = require("./routes/StoreBookingRoutes");
 const tripRoutes = require("./routes/tripRoutes");
 const auditRoutes = require("./routes/auditRoutes");
 const reportRoutes = require("./routes/reportRoutes");
-const storeSlotRoutes = require('./routes/StoreSlotRoutes')
+const storeSlotRoutes = require("./routes/StoreSlotRoutes");
 // Admin paths
 const dashboardRoutes = require("./routes/dashboardRoutes");
 
@@ -42,6 +43,7 @@ app.use("/api/stores", storeRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/items", itemRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/store-bookings", storeBookingRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/audit-logs", auditRoutes);
 app.use("/api/reports", reportRoutes);
