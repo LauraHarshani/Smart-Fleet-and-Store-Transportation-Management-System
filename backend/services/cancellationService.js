@@ -63,7 +63,12 @@ const calculateTripLoad = (bookings) => {
       }
     }
 
-    const bookingCount = Number(booking.totalItems);
+    const bookingCount =
+      booking.totalItems !== null &&
+      booking.totalItems !== undefined &&
+      booking.totalItems !== ""
+        ? Number(booking.totalItems)
+        : NaN;
     totalItems += Number.isFinite(bookingCount)
       ? bookingCount
       : (booking.items || []).reduce((sum, item) => sum + parseCount(item.quantity), 0);
