@@ -1,3 +1,4 @@
+
 const Store = require("../models/store");
 const StoreSlot = require("../models/StoreSlot");
 
@@ -13,10 +14,12 @@ const lockStoreReservations = async (storeId, session) => {
     { $inc: { slotReservationRevision: 1 } },
     { session }
   );
-  if (!result.matchedCount) throw createError("Store not found.", 404);
+
+  if (!result.matchedCount) {
+    throw createError("Store not found.", 404);
+  }
 };
 
-// Convert a date into minutes after midnight in Sri Lanka time
 const getSriLankaMinutes = (date) => {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Colombo",
@@ -31,7 +34,6 @@ const getSriLankaMinutes = (date) => {
   return hour * 60 + minute;
 };
 
-// Get the local calendar date in Sri Lanka
 const getSriLankaDate = (date) => {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Colombo",
@@ -41,7 +43,6 @@ const getSriLankaDate = (date) => {
   }).format(date);
 };
 
-// Convert HH:mm into minutes
 const timeToMinutes = (time) => {
   if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(time || "")) {
     throw createError(`Invalid store operating time: ${time}`);
@@ -51,25 +52,66 @@ const timeToMinutes = (time) => {
   return hours * 60 + minutes;
 };
 
-// Check whether the requested reservation fits store operating hours
-const checkOperatingHours = (store, startAt, endAt) => {
-  const openingTime = store.operatingHours?.open;
-  const closingTime = store.operatingHours?.close;
+// Supports both operatingHours: { open, close }
+// and legacy hours: "08:00 AM - 06:00 PM (Mon - Sat)".
+const parseOperatingHours = (store) => {
+  const structuredOpen = store.operatingHours?.open;
+  const structuredClose = store.operatingHours?.close;
 
-  if (!openingTime || !closingTime) {
+  if (structuredOpen && structuredClose) {
+    return {
+      open: structuredOpen,
+      close: structuredClose,
+    };
+  }
+
+  const displayHours = String(store.hours || "");
+
+  const match = displayHours.match(
+    /(\d{1,2}:\d{2}\s*(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM))/i
+  );
+
+  if (!match) {
     throw createError("Store operating hours are not configured.");
   }
 
-  const openingMinutes = timeToMinutes(openingTime);
-  const closingMinutes = timeToMinutes(closingTime);
+  const to24Hour = (value) => {
+    const parsed = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+
+    if (!parsed) {
+      throw createError(`Invalid store operating time: ${value}`);
+    }
+
+    let hour = Number(parsed[1]);
+    const minute = Number(parsed[2]);
+    const period = parsed[3].toUpperCase();
+
+    if (hour < 1 || hour > 12 || minute > 59) {
+      throw createError(`Invalid store operating time: ${value}`);
+    }
+
+    if (period === "AM" && hour === 12) hour = 0;
+    if (period === "PM" && hour !== 12) hour += 12;
+
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  };
+
+  return {
+    open: to24Hour(match[1].replace(/\s+/g, " ").trim()),
+    close: to24Hour(match[2].replace(/\s+/g, " ").trim()),
+  };
+};
+
+const checkOperatingHours = (store, startAt, endAt) => {
+  const { open, close } = parseOperatingHours(store);
+
+  const openingMinutes = timeToMinutes(open);
+  const closingMinutes = timeToMinutes(close);
 
   if (closingMinutes <= openingMinutes) {
-    throw createError(
-      "Overnight store operating hours are not supported."
-    );
+    throw createError("Overnight store operating hours are not supported.");
   }
 
-  // This implementation supports reservations within one local calendar day
   if (getSriLankaDate(startAt) !== getSriLankaDate(endAt)) {
     throw createError(
       "Reservations must start and end on the same calendar day."
@@ -79,17 +121,13 @@ const checkOperatingHours = (store, startAt, endAt) => {
   const startMinutes = getSriLankaMinutes(startAt);
   const endMinutes = getSriLankaMinutes(endAt);
 
-  if (
-    startMinutes < openingMinutes ||
-    endMinutes > closingMinutes
-  ) {
+  if (startMinutes < openingMinutes || endMinutes > closingMinutes) {
     throw createError(
-      `Reservation must be within store operating hours (${openingTime} - ${closingTime}).`
+      `Reservation must be within store operating hours (${open} - ${close}).`
     );
   }
 };
 
-// Read the configurable dock count
 const getDockCapacity = (store) => {
   const capacity = Number(store.docks);
 
@@ -102,7 +140,22 @@ const getDockCapacity = (store) => {
   return capacity;
 };
 
-// Check whether overlapping reservations exceed the available docks
+const getStoreDockCapacity = async (storeId, session = null) => {
+  let query = Store.findById(storeId).select("docks");
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  const store = await query;
+
+  if (!store) {
+    throw createError("Store not found.", 404);
+  }
+
+  return getDockCapacity(store);
+};
+
 const checkDockAvailability = async ({
   storeId,
   startAt,
@@ -117,13 +170,18 @@ const checkDockAvailability = async ({
     endAt: { $gt: startAt },
   };
 
-  // Exclude the current reservation when updating it
   if (excludeSlotId) {
     query._id = { $ne: excludeSlotId };
   }
 
-  let existingQuery = StoreSlot.find(query).select("startAt endAt").lean();
-  if (session) existingQuery = existingQuery.session(session);
+  let existingQuery = StoreSlot.find(query)
+    .select("startAt endAt")
+    .lean();
+
+  if (session) {
+    existingQuery = existingQuery.session(session);
+  }
+
   const existingSlots = await existingQuery;
 
   const events = [
@@ -133,23 +191,14 @@ const checkDockAvailability = async ({
 
   existingSlots.forEach((slot) => {
     events.push(
-      {
-        time: new Date(slot.startAt).getTime(),
-        change: 1,
-      },
-      {
-        time: new Date(slot.endAt).getTime(),
-        change: -1,
-      }
+      { time: new Date(slot.startAt).getTime(), change: 1 },
+      { time: new Date(slot.endAt).getTime(), change: -1 }
     );
   });
 
-  // At identical timestamps, process departures before arrivals.
-  // This allows one reservation to begin exactly when another ends.
   events.sort((a, b) => a.time - b.time || a.change - b.change);
 
-  const dockCapacity = await getStoreDockCapacity(storeId);
-
+  const dockCapacity = await getStoreDockCapacity(storeId, session);
   let occupiedDocks = 0;
 
   for (const event of events) {
@@ -171,18 +220,6 @@ const checkDockAvailability = async ({
   };
 };
 
-// Retrieve dock capacity from the store
-const getStoreDockCapacity = async (storeId) => {
-  const store = await Store.findById(storeId).select("docks");
-
-  if (!store) {
-    throw createError("Store not found.", 404);
-  }
-
-  return getDockCapacity(store);
-};
-
-// Main availability check
 const checkSlotAvailability = async ({
   storeId,
   startAt,
@@ -202,7 +239,11 @@ const checkSlotAvailability = async ({
   }
 
   let storeQuery = Store.findById(storeId);
-  if (session) storeQuery = storeQuery.session(session);
+
+  if (session) {
+    storeQuery = storeQuery.session(session);
+  }
+
   const store = await storeQuery;
 
   if (!store) {
@@ -230,56 +271,106 @@ const checkSlotAvailability = async ({
   };
 };
 
-// Validate a batch of proposed reservations as one schedule. Existing reservations
-// being replaced by this batch are excluded, then dock occupancy is simulated
-// across the complete set so multiple docks can be used correctly.
-const checkSlotScheduleAvailability = async ({ proposedSlots, replacedSlotIds = [], session }) => {
+const checkSlotScheduleAvailability = async ({
+  proposedSlots,
+  replacedSlotIds = [],
+  session = null,
+}) => {
   const groups = new Map();
 
   for (const proposed of proposedSlots) {
+    const startAt = new Date(proposed.startAt);
+    const endAt = new Date(proposed.endAt);
+
+    if (
+      Number.isNaN(startAt.getTime()) ||
+      Number.isNaN(endAt.getTime()) ||
+      endAt <= startAt
+    ) {
+      throw createError("Invalid reservation start or end time.");
+    }
+
     const storeId = proposed.store.toString();
-    const store = await Store.findById(storeId).session(session || null);
-    if (!store) throw createError("Store not found.", 404);
-    checkOperatingHours(store, proposed.startAt, proposed.endAt);
-    if (!groups.has(storeId)) groups.set(storeId, { store, slots: [] });
-    groups.get(storeId).slots.push(proposed);
+
+    let storeQuery = Store.findById(storeId);
+
+    if (session) {
+      storeQuery = storeQuery.session(session);
+    }
+
+    const store = await storeQuery;
+
+    if (!store) {
+      throw createError("Store not found.", 404);
+    }
+
+    checkOperatingHours(store, startAt, endAt);
+
+    if (!groups.has(storeId)) {
+      groups.set(storeId, { store, slots: [] });
+    }
+
+    groups.get(storeId).slots.push({ startAt, endAt });
   }
 
   for (const [storeId, group] of groups) {
-    const startAt = new Date(Math.min(...group.slots.map((slot) => slot.startAt.getTime())));
-    const endAt = new Date(Math.max(...group.slots.map((slot) => slot.endAt.getTime())));
+    const earliestStart = Math.min(
+      ...group.slots.map((slot) => slot.startAt.getTime())
+    );
+
+    const latestEnd = Math.max(
+      ...group.slots.map((slot) => slot.endAt.getTime())
+    );
+
     const query = {
       store: storeId,
       status: { $in: ["Reserved", "Confirmed", "Rescheduled"] },
-      startAt: { $lt: endAt },
-      endAt: { $gt: startAt },
+      startAt: { $lt: new Date(latestEnd) },
+      endAt: { $gt: new Date(earliestStart) },
     };
-    if (replacedSlotIds.length) query._id = { $nin: replacedSlotIds };
 
-    let existingQuery = StoreSlot.find(query).select("startAt endAt").lean();
-    if (session) existingQuery = existingQuery.session(session);
+    if (replacedSlotIds.length) {
+      query._id = { $nin: replacedSlotIds };
+    }
+
+    let existingQuery = StoreSlot.find(query)
+      .select("startAt endAt")
+      .lean();
+
+    if (session) {
+      existingQuery = existingQuery.session(session);
+    }
+
     const existingSlots = await existingQuery;
     const events = [];
+
     for (const slot of existingSlots) {
       events.push(
         { time: new Date(slot.startAt).getTime(), change: 1 },
         { time: new Date(slot.endAt).getTime(), change: -1 }
       );
     }
+
     for (const slot of group.slots) {
       events.push(
         { time: slot.startAt.getTime(), change: 1 },
         { time: slot.endAt.getTime(), change: -1 }
       );
     }
+
     events.sort((a, b) => a.time - b.time || a.change - b.change);
 
     const dockCapacity = getDockCapacity(group.store);
     let occupiedDocks = 0;
+
     for (const event of events) {
       occupiedDocks += event.change;
+
       if (occupiedDocks > dockCapacity) {
-        throw createError(`All ${dockCapacity} docks are occupied during the proposed schedule.`, 409);
+        throw createError(
+          `All ${dockCapacity} docks are occupied during the proposed schedule.`,
+          409
+        );
       }
     }
   }
