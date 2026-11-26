@@ -1,56 +1,78 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { 
   Search, Download, Plus, Calendar, ChevronRight, Truck, 
-  CheckCircle2, History, Edit2, ArrowLeft, 
+  CheckCircle2, History, Edit2,
   MapPin, Clock, Package, Trash2, ShieldAlert, Save, Send 
 } from 'lucide-react';
+import api from '../../services/api';
+
+const mapStoreBooking = (booking) => {
+  const lines = (booking.items || []).map((line) => ({
+    name: line.item?.name || 'Item',
+    quantity: `${line.quantity} ${line.unit || 'units'}`,
+    weight: line.item?.weightKg ? `${(line.quantity * line.item.weightKg).toLocaleString()} kg` : '—',
+    description: line.item?.description || '',
+  }));
+  const totalWeightKg = (booking.items || []).reduce((sum, line) => sum + (Number(line.item?.weightKg) || 0) * Number(line.quantity || 0), 0);
+  const totalItems = (booking.items || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+  const date = booking.requestedPickupDate ? new Date(booking.requestedPickupDate) : null;
+  const statusLabels = { Submitted: 'Pending Approval', Approved: 'Confirmed', 'In Progress': 'In Transit' };
+
+  return {
+    ...booking,
+    id: booking.bookingCode || booking._id,
+    status: statusLabels[booking.status] || booking.status,
+    type: 'Store Transfer',
+    rawDate: date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : '',
+    date: date && !Number.isNaN(date.getTime()) ? `${date.toLocaleDateString()} - ${booking.requestedTimeWindow?.startTime || ''}` : '—',
+    from: booking.pickupStore?.name || '—',
+    to: booking.destinationStore?.name || '—',
+    distance: '—',
+    driver: booking.assignedTrip?.driver || 'Not assigned',
+    vehicle: booking.assignedVehicle?.registrationNumber || 'Not assigned',
+    cargo: lines.map((line) => line.name).join(', '),
+    consignments: lines.length,
+    totalItems,
+    totalWeight: totalWeightKg ? `${totalWeightKg.toLocaleString()} kg` : '—',
+    items: lines,
+    history: (booking.changeHistory || []).map((entry) => ({
+      time: entry.changedAt ? new Date(entry.changedAt).toLocaleString() : '',
+      action: entry.action,
+      by: entry.changedBy?.name || 'System',
+    })),
+  };
+};
 
 // ==========================================
 // 1. CREATE / EDIT BOOKING COMPONENT (FE-3)
 // ==========================================
-const CreateBookingView = ({ onBack, editData }) => {
-  const [formData, setFormData] = useState({
-    pickupStore: 'Colombo Main Store (Peliyagoda Central Hub - LK-WP)',
-    destinationStore: '',
-    dispatchDate: '',
-    timeSlot: '',
-    specialInstructions: '',
-    directives: []
-  });
+const getInitialBookingForm = (editData) => ({
+  pickupStore: editData?.from || 'Colombo Main Store (Peliyagoda Central Hub - LK-WP)',
+  destinationStore: editData?.to || '',
+  dispatchDate: editData?.rawDate || '',
+  timeSlot: editData ? 'Morning Prime: 09:00 AM - 12:00 PM IST' : '',
+  specialInstructions: editData?.cargo || '',
+  directives: editData ? ['+ Keep Dry'] : [],
+});
 
-  const [items, setItems] = useState([
-    { id: 1, itemType: '', quantity: '', unit: 'Cartons', weight: '', weightUnit: 'kg' }
-  ]);
+const getInitialBookingItems = (editData) => {
+  if (!editData?.consignments) return [{ id: 1, itemType: '', quantity: '', unit: 'Cartons', weight: '', weightUnit: 'kg' }];
+  const count = Number(editData.consignments) || 1;
+  return Array.from({ length: count }, (_, index) => ({
+    id: Date.now() + index,
+    itemType: editData.items?.[index]?.name || 'Pure Ceylon Black Tea (BOPF) - 25kg Cartons (Export Grade)',
+    quantity: String(editData.items?.[index]?.quantity || '10'),
+    unit: 'Cartons',
+    weight: String(editData.items?.[index]?.weight || (parseInt(editData.totalWeight?.replace(/,/g, ''), 10) / count) || 1000).replace(/[^\d.]/g, ''),
+    weightUnit: 'kg',
+  }));
+};
+
+const CreateBookingView = ({ onBack, editData }) => {
+  const [formData, setFormData] = useState(() => getInitialBookingForm(editData));
+  const [items, setItems] = useState(() => getInitialBookingItems(editData));
 
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (editData) {
-      setFormData({
-        pickupStore: editData.from || 'Colombo Main Store (Peliyagoda Central Hub - LK-WP)',
-        destinationStore: editData.to || '',
-        dispatchDate: editData.date ? editData.date.split(' - ')[0] : '', 
-        timeSlot: 'Morning Prime: 09:00 AM - 12:00 PM IST', 
-        specialInstructions: editData.cargo || '', 
-        directives: ['+ Keep Dry'] 
-      });
-
-      if (editData.consignments) {
-        const mockItems = [];
-        for (let i = 0; i < editData.consignments; i++) {
-          mockItems.push({
-            id: Date.now() + i,
-            itemType: 'Pure Ceylon Black Tea (BOPF) - 25kg Cartons (Export Grade)',
-            quantity: '10',
-            unit: 'Cartons',
-            weight: (parseInt(editData.totalWeight?.replace(/,/g, '')) / editData.consignments).toString() || '1000',
-            weightUnit: 'kg'
-          });
-        }
-        setItems(mockItems);
-      }
-    }
-  }, [editData]);
 
   const itemTypes = [
     'Pure Ceylon Black Tea (BOPF) - 25kg Cartons (Export Grade)',
@@ -422,87 +444,29 @@ const StoreBookings = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const bookings = [
-    {
-      id: 'BKG-2026-0842',
-      status: 'In Transit',
-      type: 'Outbound',
-      date: 'Oct 28, 2026 - 09:30 AM IST',
-      rawDate: '2026-10-28',
-      from: 'Colombo Main Store (Peliyagoda)',
-      to: 'Galle Coastal Staging',
-      cargo: 'Pure Ceylon BOPF Tea (2,000 kg) & Spices (700 kg)',
-      consignments: 2,
-      distance: '118.4 km',
-      driver: 'Kapila Jayawardena',
-      vehicle: 'LK-WP 8821',
-      totalWeight: '2,700 kg',
-      history: [
-        { time: 'Oct 28, 08:30 AM IST', action: 'Status changed to In Transit', by: 'System' },
-        { time: 'Oct 27, 18:30 IST', action: 'Vehicle LK-WP 8821 Assigned', by: 'Dispatcher N. Perera' },
-        { time: 'Oct 27, 14:15 IST', action: 'Booking Created', by: 'Harshani' }
-      ]
-    },
-    {
-      id: 'BKG-2026-0841',
-      status: 'Confirmed',
-      type: 'Inbound',
-      date: 'Oct 28, 2026 - 02:00 PM IST',
-      rawDate: '2026-10-28',
-      from: 'Kandy Regional Depot',
-      to: 'Colombo Main Store (Peliyagoda)',
-      cargo: 'Highlands Arabica Coffee & Cardamom (1,850 kg)',
-      consignments: 1,
-      totalWeight: '1,850 kg',
-      history: [
-        { time: 'Oct 27, 09:00 AM IST', action: 'Booking Confirmed', by: 'Admin' }
-      ]
-    },
-    {
-      id: 'BKG-2026-0839',
-      status: 'Pending Approval',
-      type: 'Outbound',
-      date: 'Oct 28, 2026 - 08:00 AM IST',
-      rawDate: '2026-10-28',
-      from: 'Colombo Main Store',
-      to: 'Kandy Regional Depot',
-      cargo: 'Organic Coconut Oil & Desiccated Copra (3,200 kg)',
-      consignments: 3,
-      totalWeight: '3,200 kg',
-      history: [
-        { time: 'Oct 28, 07:15 AM IST', action: 'Booking Created', by: 'Harshani' }
-      ]
-    },
-    {
-      id: 'BKG-2026-0835',
-      status: 'In Transit',
-      type: 'Inbound',
-      date: 'Oct 29, 2026 - 11:15 AM IST',
-      rawDate: '2026-10-29',
-      from: 'Galle Coastal Staging',
-      to: 'Kandy Regional Depot',
-      cargo: 'Cinnamon Quills Alba Grade (1,400 kg)',
-      consignments: 1,
-      history: [
-        { time: 'Oct 29, 10:15 AM IST', action: 'Vehicle Assigned', by: 'Admin' }
-      ]
-    },
-    {
-      id: 'BKG-2026-0830',
-      status: 'Completed',
-      type: 'Inbound',
-      date: 'Oct 30, 2026 - 04:30 PM IST',
-      rawDate: '2026-10-30',
-      from: 'Kandy Regional Depot',
-      to: 'Colombo Main Store',
-      cargo: 'General Ambient FMCG Provisions (4,100 kg)',
-      consignments: 4,
-      history: [
-        { time: 'Oct 30, 04:30 PM IST', action: 'Booking Completed', by: 'System' }
-      ]
-    }
-  ];
+  const [bookings, setBookings] = useState([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
+  const [bookingError, setBookingError] = useState('');
+  const [bookingNotice, setBookingNotice] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
 
+  const loadBookings = useCallback(async () => {
+    setIsLoadingBookings(true);
+    setBookingError('');
+    try {
+      const response = await api.get('/store-bookings');
+      setBookings((response.data?.bookings || []).map(mapStoreBooking));
+    } catch (error) {
+      setBookingError(error.response?.data?.message || 'Unable to load store bookings.');
+    } finally {
+      setIsLoadingBookings(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadBookings(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadBookings]);
   const filteredBookings = bookings.filter(booking => {
     const matchesSearch = 
       booking.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -542,7 +506,7 @@ const StoreBookings = () => {
     }
   };
 
-  const canEditOrCancel = (status) => status === 'Pending Approval' || status === 'Confirmed';
+  const canEditOrCancel = (status) => ['Draft', 'Pending Approval', 'Changes Requested', 'Confirmed'].includes(status);
 
   const handleEditClick = () => {
     setBookingToEdit(selectedBooking);
@@ -582,8 +546,36 @@ const StoreBookings = () => {
     alert("Downloading Booking Details...");
   };
 
-  const handleCancelBookingClick = () => {
-    setSelectedBooking(null);
+  const handleCancelBookingClick = async () => {
+    if (!selectedBooking?._id) return;
+    const reason = window.prompt(`Why are you cancelling ${selectedBooking.id}?`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setBookingError('A cancellation reason is required.');
+      return;
+    }
+    setIsCancelling(true);
+    setBookingError('');
+    setBookingNotice('');
+    try {
+      const response = await api.patch(`/store-bookings/${selectedBooking._id}/cancel`, { reason: reason.trim() });
+      const updated = {
+        ...selectedBooking,
+        status: response.data.booking?.status || 'Cancelled',
+        history: [...(selectedBooking.history || []), { time: new Date().toLocaleString(), action: 'CANCELLED', by: 'You' }],
+      };
+      setBookings((previous) => previous.map((booking) => booking._id === updated._id ? updated : booking));
+      setSelectedBooking(updated);
+      setBookingError('');
+      const trip = response.data.trip;
+      setBookingNotice(trip
+        ? `Booking cancelled. Trip ${trip.id} recalculated: ${trip.load || '0 Units'} · ${trip.route || 'no remaining route'} · ${trip.activeReservationsRevalidated || 0} reservations revalidated.`
+        : 'Booking cancelled successfully.');
+    } catch (error) {
+      setBookingError(error.response?.data?.message || 'Could not cancel this booking.');
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   if (isCreating) {
@@ -607,7 +599,7 @@ const StoreBookings = () => {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-medium">24 Active Orders</span>
+          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-medium">{bookings.filter((booking) => !['Cancelled', 'Completed'].includes(booking.status)).length} Active Orders</span>
           <button 
             onClick={handleExportCSV}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer shadow-sm"
@@ -620,7 +612,11 @@ const StoreBookings = () => {
         </div>
       </div>
 
+      {bookingNotice && <div role="status" className="mx-6 mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">{bookingNotice}</div>}
+
       <div className="flex px-6 pb-6 gap-6 items-start"> 
+
+        {bookingError && <div role="alert" className="fixed right-6 top-6 z-50 max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg">{bookingError}</div>}
         
         {/* Left Column: List */}
         <div className="flex-1 min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -701,7 +697,7 @@ const StoreBookings = () => {
           </div>
 
           <div>
-            {filteredBookings.length > 0 ? (
+            {isLoadingBookings ? <div className="p-8 text-center text-sm text-gray-500">Loading bookings…</div> : filteredBookings.length > 0 ? (
               filteredBookings.map((booking) => (
                 <div key={booking.id} onClick={() => setSelectedBooking(booking)} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-green-50/30' : ''}`}>
                   <div className="flex justify-between items-start mb-2">
@@ -922,10 +918,10 @@ const StoreBookings = () => {
                {/* 2. Cancel Button */}
                <button 
                   onClick={handleCancelBookingClick}
-                  disabled={!canEditOrCancel(selectedBooking.status)} 
+                  disabled={!canEditOrCancel(selectedBooking.status) || isCancelling}
                   className={`px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${canEditOrCancel(selectedBooking.status) ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'}`}
                >
-                  Cancel Booking
+                  {isCancelling ? 'Cancelling…' : 'Cancel Booking'}
                </button>
                
                {/* 3. Edit Button */}
