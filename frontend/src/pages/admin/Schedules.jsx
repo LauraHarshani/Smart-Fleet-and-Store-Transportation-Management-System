@@ -46,6 +46,7 @@ const toSlotView = (slot) => {
     ...slot,
     storeId: slot.store?._id || slot.store,
     store: slot.store?.name || slot.store?.code || "Store",
+    driver: slot.trip?.driver,
     tripCode: slot.trip?.id || "Trip",
     type: slot.operationType,
     start,
@@ -56,7 +57,45 @@ const toSlotView = (slot) => {
     purpose: slot.operationType,
     quantity: "—",
     dock: slot.store?.docks ?? "—",
+    dockNumber: slot.dockNumber ?? null,
   };
+};
+
+const assignDisplayDocks = (slotData) => {
+  const views = slotData.map(toSlotView);
+  const storeGroups = new Map();
+  views.forEach((slot) => {
+    const key = String(slot.storeId || slot.store);
+    if (!storeGroups.has(key)) storeGroups.set(key, []);
+    storeGroups.get(key).push(slot);
+  });
+
+  storeGroups.forEach((storeSlots) => {
+    const capacity = Math.max(1, Number(storeSlots[0]?.dock) || 1);
+    const lanes = Array.from({ length: capacity }, () => []);
+    const overlaps = (lane, slot) => lane.some((item) => new Date(item.startAt) < new Date(slot.endAt) && new Date(item.endAt) > new Date(slot.startAt));
+
+    // Keep saved assignments fixed, then place older unnumbered reservations in free lanes.
+    storeSlots.filter((slot) => Number.isInteger(Number(slot.dockNumber)) && Number(slot.dockNumber) > 0)
+      .forEach((slot) => {
+        const index = Number(slot.dockNumber) - 1;
+        while (lanes.length <= index) lanes.push([]);
+        lanes[index].push(slot);
+        slot.displayDockNumber = Number(slot.dockNumber);
+      });
+
+    storeSlots.filter((slot) => slot.dockNumber == null || !Number.isInteger(Number(slot.dockNumber)))
+      .sort((a, b) => new Date(a.startAt) - new Date(b.startAt) || new Date(a.endAt) - new Date(b.endAt))
+      .forEach((slot) => {
+        let index = lanes.findIndex((lane) => !overlaps(lane, slot));
+        if (index < 0) { index = lanes.length; lanes.push([]); }
+        lanes[index].push(slot);
+        slot.displayDockNumber = index + 1;
+        slot.displayDockInferred = true;
+      });
+  });
+
+  return views;
 };
 
 const SlotReservationModal = ({ stores, trips, onClose, onCreated }) => {
@@ -151,7 +190,7 @@ const Schedules = () => {
     try {
       const [tripData, slotData, storeData] = await Promise.all([getTrips(), getStoreSlots(), getAllStores()]);
       setTrips(tripData.map(toTripView));
-      setSlots(slotData.map(toSlotView));
+      setSlots(assignDisplayDocks(slotData));
       setStores(storeData);
     } catch (error) {
       setScheduleError(error.response?.data?.message || "Unable to load live schedules. Check the backend connection and try again.");

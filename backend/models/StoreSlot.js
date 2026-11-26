@@ -33,6 +33,12 @@ const slotSchema = new mongoose.Schema(
       trim: true,
     },
 
+    dockNumber: {
+      type: Number,
+      min: 1,
+      default: null,
+    },
+
     operationType: {
       type: String,
       enum: ["Loading", "Unloading", "Maintenance"],
@@ -79,6 +85,7 @@ slotSchema.pre("validate", function () {
 
 // Useful indexes for retrieving reservations
 slotSchema.index({ store: 1, startAt: 1, endAt: 1 });
+slotSchema.index({ store: 1, dockNumber: 1, startAt: 1, endAt: 1 });
 slotSchema.index({ trip: 1, stopId: 1 });
 
 module.exports = mongoose.models.StoreSlot || mongoose.model("StoreSlot", slotSchema);

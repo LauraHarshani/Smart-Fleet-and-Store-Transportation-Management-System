@@ -220,11 +220,48 @@ const checkDockAvailability = async ({
   };
 };
 
+const getAvailableDockNumbers = async ({ storeId, startAt, endAt, excludeSlotId = null, session = null }) => {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    throw createError("Invalid reservation start or end time.");
+  }
+
+  let storeQuery = Store.findById(storeId);
+  if (session) storeQuery = storeQuery.session(session);
+  const store = await storeQuery;
+  if (!store) throw createError("Store not found.", 404);
+  checkOperatingHours(store, start, end);
+
+  const query = {
+    store: storeId,
+    status: { $in: ["Reserved", "Confirmed", "Rescheduled"] },
+    startAt: { $lt: end },
+    endAt: { $gt: start },
+  };
+  if (excludeSlotId) query._id = { $ne: excludeSlotId };
+
+  let slotsQuery = StoreSlot.find(query).select("dockNumber").lean();
+  if (session) slotsQuery = slotsQuery.session(session);
+  const slots = await slotsQuery;
+  const capacity = getDockCapacity(store);
+  const capacityResult = await checkDockAvailability({ storeId, startAt: start, endAt: end, excludeSlotId, session });
+  if (!capacityResult.available) return { capacity, availableDockNumbers: [] };
+  const claimed = new Set(slots.map((slot) => Number(slot.dockNumber)).filter((number) => Number.isInteger(number) && number >= 1 && number <= capacity));
+  const legacyUnassigned = slots.filter((slot) => slot.dockNumber == null || !Number.isInteger(Number(slot.dockNumber))).length;
+  const free = Array.from({ length: capacity }, (_, index) => index + 1).filter((number) => !claimed.has(number));
+  // Older reservations have no dock number. Reserve a deterministic free dock for each
+  // overlapping legacy reservation so the picker does not offer an occupied capacity.
+  free.splice(0, legacyUnassigned);
+  return { capacity, availableDockNumbers: free };
+};
+
 const checkSlotAvailability = async ({
   storeId,
   startAt,
   endAt,
   excludeSlotId = null,
+  dockNumber = null,
   session = null,
 }) => {
   const start = new Date(startAt);
@@ -264,9 +301,23 @@ const checkSlotAvailability = async ({
     throw createError(dockResult.message, 409);
   }
 
+  if (dockNumber !== null && dockNumber !== undefined) {
+    const dock = Number(dockNumber);
+    if (!Number.isInteger(dock) || dock < 1 || dock > dockResult.dockCapacity) {
+      throw createError(`Dock must be a number between 1 and ${dockResult.dockCapacity}.`);
+    }
+    const { availableDockNumbers } = await getAvailableDockNumbers({
+      storeId, startAt: start, endAt: end, excludeSlotId, session,
+    });
+    if (!availableDockNumbers.includes(dock)) {
+      throw createError(`Dock ${dock} is already reserved for that time. Choose another dock.`, 409);
+    }
+  }
+
   return {
     available: true,
     dockCapacity: dockResult.dockCapacity,
+    dockNumber: dockNumber === null || dockNumber === undefined ? null : Number(dockNumber),
     message: "Reservation time is available.",
   };
 };
@@ -310,7 +361,7 @@ const checkSlotScheduleAvailability = async ({
       groups.set(storeId, { store, slots: [] });
     }
 
-    groups.get(storeId).slots.push({ startAt, endAt });
+    groups.get(storeId).slots.push({ startAt, endAt, dockNumber: proposed.dockNumber ?? null });
   }
 
   for (const [storeId, group] of groups) {
@@ -334,7 +385,7 @@ const checkSlotScheduleAvailability = async ({
     }
 
     let existingQuery = StoreSlot.find(query)
-      .select("startAt endAt")
+      .select("startAt endAt dockNumber")
       .lean();
 
     if (session) {
@@ -342,6 +393,16 @@ const checkSlotScheduleAvailability = async ({
     }
 
     const existingSlots = await existingQuery;
+    for (const proposed of group.slots) {
+      if (proposed.dockNumber == null) continue;
+      const dock = Number(proposed.dockNumber);
+      if (!Number.isInteger(dock) || dock < 1 || dock > getDockCapacity(group.store)) {
+        throw createError(`Dock must be a number between 1 and ${getDockCapacity(group.store)}.`);
+      }
+      const hasConflict = existingSlots.some((slot) => Number(slot.dockNumber) === dock && new Date(slot.startAt) < proposed.endAt && new Date(slot.endAt) > proposed.startAt)
+        || group.slots.some((other) => other !== proposed && Number(other.dockNumber) === dock && other.startAt < proposed.endAt && other.endAt > proposed.startAt);
+      if (hasConflict) throw createError(`Dock ${dock} is already reserved during the proposed schedule.`, 409);
+    }
     const events = [];
 
     for (const slot of existingSlots) {
@@ -380,6 +441,7 @@ const checkSlotScheduleAvailability = async ({
 
 module.exports = {
   checkSlotAvailability,
+  getAvailableDockNumbers,
   checkSlotScheduleAvailability,
   checkOperatingHours,
   checkDockAvailability,

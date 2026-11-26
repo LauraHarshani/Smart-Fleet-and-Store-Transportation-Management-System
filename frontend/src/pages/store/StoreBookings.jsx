@@ -152,10 +152,9 @@ const mapBackendStatusToUi = (backendStatus) => {
 // 1. CREATE / EDIT BOOKING COMPONENT (FE-3)
 // ==========================================
 const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], currentUserId, assignedStoreId, onSaved, onSuccess }) => {
-  const pickupStoresList = assignedStoreId
-    ? storesList.filter((store) => store._id === assignedStoreId)
-    : storesList;
-  const defaultPickupStore = pickupStoresList[0];
+  const pickupStoresList = storesList;
+  const assignedStore = storesList.find((store) => store._id === assignedStoreId);
+  const defaultPickupStore = assignedStore || pickupStoresList[0];
 
   const [formData, setFormData] = useState({
     pickupStoreId: defaultPickupStore?._id || '',
@@ -174,17 +173,21 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
 
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const isInboundRoute = Boolean(assignedStoreId && formData.pickupStoreId !== assignedStoreId);
+  const destinationStoresList = isInboundRoute
+    ? storesList.filter((store) => store._id === assignedStoreId)
+    : storesList.filter((store) => store._id !== formData.pickupStoreId);
 
   useEffect(() => {
     if (!editData && pickupStoresList.length > 0 && !formData.pickupStoreId) {
-      const first = pickupStoresList[0];
+      const first = defaultPickupStore;
       setFormData((prev) => ({
         ...prev,
         pickupStoreId: first._id,
         pickupStore: first.name,
       }));
     }
-  }, [storesList, assignedStoreId, editData, formData.pickupStoreId]);
+  }, [storesList, assignedStoreId, editData, formData.pickupStoreId, defaultPickupStore]);
 
   useEffect(() => {
     if (editData) {
@@ -299,7 +302,8 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.destinationStore) newErrors.destinationStore = 'Required';
+    if (!formData.pickupStoreId) newErrors.pickupStore = 'Required';
+    if (!(formData.destinationStoreId || formData.destinationStore)) newErrors.destinationStore = 'Required';
     if (!formData.dispatchDate) newErrors.dispatchDate = 'Required';
     if (!formData.timeSlot) newErrors.timeSlot = 'Required';
 
@@ -409,7 +413,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
     storesList.find((s) => s._id === formData.pickupStoreId || s.name === formData.pickupStore) ||
     storesList[0];
   const selectedDestObj = storesList.find(
-    (s) => s._id === formData.destinationStore || s.name === formData.destinationStore
+    (s) => s._id === (formData.destinationStoreId || formData.destinationStore) || s.name === formData.destinationStore
   );
 
   return (
@@ -464,13 +468,17 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                       const val = e.target.value;
                       const found = storesList.find((s) => s._id === val || s.name === val);
                       const nextPickupId = found?._id || val;
-                      setFormData((prev) => ({
-                        ...prev,
-                        pickupStoreId: nextPickupId,
-                        pickupStore: found ? found.name : val,
-                        destinationStore: prev.destinationStore === nextPickupId ? '' : prev.destinationStore,
-                        destinationStoreId: prev.destinationStoreId === nextPickupId ? '' : prev.destinationStoreId,
-                      }));
+                      const nextIsInbound = Boolean(assignedStoreId && nextPickupId !== assignedStoreId);
+                      setFormData((prev) => {
+                        const destinationIsPickup = prev.destinationStoreId === nextPickupId || prev.destinationStore === nextPickupId;
+                        return {
+                          ...prev,
+                          pickupStoreId: nextPickupId,
+                          pickupStore: found ? found.name : val,
+                          destinationStoreId: nextIsInbound ? assignedStoreId : (destinationIsPickup ? '' : prev.destinationStoreId),
+                          destinationStore: nextIsInbound ? assignedStoreId : (destinationIsPickup ? '' : prev.destinationStore),
+                        };
+                      });
                     }}
                     className="w-full p-3.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600 outline-none appearance-none"
                   >
@@ -482,6 +490,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                   </select>
                   <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
+                {errors.pickupStore && <p className="text-red-500 text-xs mt-1">{errors.pickupStore}</p>}
                 <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
                   <span className="w-1 h-1 rounded-full bg-green-500"></span> {selectedPickupObj?.address || selectedPickupObj?.region || 'Authorized Store Hub'}
                 </p>
@@ -493,32 +502,34 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                 </label>
                 <div className="relative">
                   <select
-                    value={formData.destinationStore}
+                    value={formData.destinationStoreId || formData.destinationStore}
                     onChange={(e) => {
                       const val = e.target.value;
                       const found = storesList.find((s) => s._id === val || s.name === val);
-                      setFormData({
-                        ...formData,
+                      setFormData((prev) => ({
+                        ...prev,
                         destinationStoreId: found?._id || val,
-                        destinationStore: val,
-                      });
+                        destinationStore: found?._id || val,
+                      }));
                     }}
-                    className={`w-full p-3.5 border rounded-lg text-sm bg-white outline-none appearance-none focus:ring-1 focus:ring-green-700 ${errors.destinationStore ? 'border-red-500' : 'border-gray-200'}`}
+                    disabled={isInboundRoute}
+                    className={`w-full p-3.5 border rounded-lg text-sm outline-none appearance-none focus:ring-1 focus:ring-green-700 disabled:bg-gray-100 disabled:text-gray-500 ${errors.destinationStore ? 'border-red-500' : 'border-gray-200 bg-white'}`}
                   >
                     <option value="">Select destination hub...</option>
-                    {storesList
-                      .filter((st) => st._id !== formData.pickupStoreId && st.name !== formData.pickupStore)
-                      .map((st) => (
-                        <option key={st._id} value={st._id}>
-                          {st.name}
-                        </option>
-                      ))}
+                    {destinationStoresList.map((st) => (
+                      <option key={st._id} value={st._id}>
+                        {st.name}
+                      </option>
+                    ))}
                   </select>
                   <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
                 {errors.destinationStore && <p className="text-red-500 text-xs mt-1">{errors.destinationStore}</p>}
                 <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-green-500"></span> {selectedDestObj?.address || selectedDestObj?.region || 'Authorized Destination Store'}
+                  <span className="w-1 h-1 rounded-full bg-green-500"></span>
+                  {isInboundRoute
+                    ? `Inbound bookings are delivered to your assigned store${selectedDestObj?.address || selectedDestObj?.region ? ` · ${selectedDestObj.address || selectedDestObj.region}` : ''}`
+                    : selectedDestObj?.address || selectedDestObj?.region || 'Choose the destination store'}
                 </p>
               </div>
             </div>
@@ -528,7 +539,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                 <div className="flex gap-4 items-center">
                   <div className="bg-green-100 w-8 h-8 flex items-center justify-center rounded-md text-green-800 font-bold text-sm">A</div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-0.5">Inter-Store Route <span className="text-[9px] bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Verified</span></p>
+                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-0.5">{isInboundRoute ? 'Inbound to your store' : assignedStoreId ? 'Outbound from your store' : 'Inter-Store Route'} <span className="text-[9px] bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Verified</span></p>
                     <p className="text-[11px] text-gray-500">{selectedPickupObj?.name || ''} → {selectedDestObj?.name || ''}</p>
                   </div>
                 </div>

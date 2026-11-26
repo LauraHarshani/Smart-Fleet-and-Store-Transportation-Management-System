@@ -1,4 +1,22 @@
+const mongoose = require("mongoose");
 const slotService = require("../services/slotService");
+const { getAvailableDockNumbers } = require("../services/conflictDetectionService");
+
+const getAvailableDocks = async (req, res) => {
+  try {
+    const { store: storeId, startAt, endAt } = req.query;
+    if (!mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({ success: false, message: "A valid store ID is required." });
+    }
+    if (req.storeScope && req.storeScope.toString() !== storeId.toString()) {
+      return res.status(403).json({ success: false, message: "Access denied. You cannot access another store's data." });
+    }
+    const result = await getAvailableDockNumbers({ storeId, startAt, endAt });
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message || "Unable to check dock availability." });
+  }
+};
 
 // CREATE SLOT RESERVATION
 const createSlot = async (req, res) => {
@@ -107,6 +125,7 @@ const cancelSlot = async (req, res) => {
 
 module.exports = {
   createSlot,
+  getAvailableDocks,
   getSlots,
   getSlotById,
   updateSlot,

@@ -182,6 +182,9 @@ const allocateStoreBooking = async (req, res) => {
   try {
     const pickupWindow = parseSlotWindow(pickupSlot?.startAt, pickupSlot?.endAt, 'Pickup');
     const destinationWindow = parseSlotWindow(destinationSlot?.startAt, destinationSlot?.endAt, 'Destination');
+      if (!Number.isInteger(Number(pickupSlot?.dockNumber)) || !Number.isInteger(Number(destinationSlot?.dockNumber))) {
+        const error = new Error('Choose an available dock for both pickup and destination slots.'); error.statusCode = 400; throw error;
+      }
     if (destinationWindow.start < pickupWindow.start) {
       return res.status(400).json({ success: false, message: 'Destination slot must be after the pickup slot begins.' });
     }
@@ -290,6 +293,7 @@ const allocateStoreBooking = async (req, res) => {
           trip: trip._id,
           stopId: tripStop._id,
           vehicle: vehicleRegistration,
+          dockNumber: Number(isPickup ? pickupSlot.dockNumber : destinationSlot.dockNumber),
           operationType: isPickup ? 'Loading' : 'Unloading',
           startAt: window.start,
           endAt: window.end,
@@ -306,7 +310,7 @@ const allocateStoreBooking = async (req, res) => {
         fromStatus: booking.status,
         toStatus: booking.status,
         changedBy: req.user?.userId,
-        reason: `Assigned ${vehicleRegistration}; reserved pickup and destination slots`,
+        reason: `Assigned ${vehicleRegistration}; reserved pickup dock ${pickupSlot.dockNumber} and destination dock ${destinationSlot.dockNumber}`,
       });
       await booking.save({ session });
       result = { trip, slots: createdSlots, booking };

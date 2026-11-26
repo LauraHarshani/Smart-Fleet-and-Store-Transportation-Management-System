@@ -151,89 +151,56 @@ const StoreTimeline = ({
               const storeSlots = slots.filter(
                 (slot) => slot.store === store
               );
-
               const dockCount = storeSlots[0]?.dock ?? "-";
+              const dockNumbers = [...new Set(storeSlots.map((slot) => Number(slot.displayDockNumber || slot.dockNumber) || 1))].sort((a, b) => a - b);
 
               return (
-                <div
-                  key={store}
-                  className="flex h-[73px] border-t border-[#E2E8E0]"
-                >
-                  {/* Store information */}
-                  <div className="flex w-[140px] shrink-0 items-center gap-2 border-r border-[#E2E8E0] px-3">
-                    <Store
-                      size={20}
-                      className="shrink-0 text-[#078B66]"
-                    />
-
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-[#173F35]">
-                        {store}
-                      </p>
-                      <p className="mt-1 text-[10px] text-[#64748B]">
-                        Loading Docks: {dockCount}
-                      </p>
+                <section key={store} className="border-t border-[#E2E8E0]">
+                  <div className="flex min-h-[48px] items-center border-b border-[#E8EDE9] bg-[#FAFCFA]">
+                    <div className="flex w-[140px] shrink-0 items-center gap-2 border-r border-[#E2E8E0] px-3">
+                      <Store size={18} className="shrink-0 text-[#078B66]" />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold text-[#173F35]">{store}</p>
+                        <p className="mt-0.5 text-[10px] text-[#64748B]">{dockCount} docks total</p>
+                      </div>
                     </div>
+                    <p className="px-3 text-[10px] text-[#64748B]">Reservations are shown on their assigned dock lanes.</p>
                   </div>
 
-                  {/* Timeline area */}
-                  <div className="relative flex-1">
-                    <div
-                      className="pointer-events-none absolute inset-0 grid"
-                      style={{
-                        gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                      }}
-                    >
-                      {HOURS.slice(0, 12).map((hour) => (
-                        <div
-                          key={hour}
-                          className="border-r border-[#E8EDE9]"
-                        />
-                      ))}
-                    </div>
-
-                    {storeSlots.map((slot) => {
-                      const style = slotStyles[slot.type];
-                      const left = timeToPercent(slot.start);
-                      const right = timeToPercent(slot.end);
-                      const width = right - left;
-                      const slotKey = slot._id || slot.id;
-                      const isSelected = selectedSlotId === slotKey;
-                      const formatTime = (time) => {
-                        const [hours, minutes] = time.split(":");
-                        return `${Number(hours)}:${minutes}`;
-                      };
-
-                      return (
-                        <button
-                          key={slot.id}
-                          onClick={() => onSelectSlot(slotKey)}
-                          title={`${slot.id} · ${slot.type} · ${slot.start}–${slot.end}`}
-                          className={`absolute top-[13px] z-10 flex h-[46px] min-w-[55px] flex-col justify-center overflow-hidden rounded-lg px-3 text-left transition hover:brightness-[0.97] ${
-                            isSelected
-                              ? "ring-2 ring-[#173F35] ring-offset-1"
-                              : ""
-                          }`}
-                          style={{
-                            left: `${left}%`,
-                            width: `${Math.max(width, 5)}%`,
-                            backgroundColor: style.bg,
-                            color: style.text,
-                          }}
-                        >
-                          <span className="truncate text-xs font-bold">
-                            {slot.type === "Maintenance" ? slot.type : slot.id}
-                          </span>
-                          <span className="truncate text-[10px]">
-                            {slot.type === "Maintenance"
-                              ? `${formatTime(slot.start)} - ${formatTime(slot.end)}`
-                              : slot.type}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                  {dockNumbers.map((dockNumber) => {
+                    const dockSlots = storeSlots.filter((slot) => Number(slot.displayDockNumber || slot.dockNumber || 1) === dockNumber);
+                    return (
+                      <div key={dockNumber} className="flex h-[58px] border-b border-[#E8EDE9] last:border-b-0">
+                        <div className="flex w-[140px] shrink-0 items-center border-r border-[#E2E8E0] px-3 text-xs font-semibold text-[#205648]">Dock {dockNumber}</div>
+                        <div className="relative flex-1">
+                          <div className="pointer-events-none absolute inset-0 grid" style={{ gridTemplateColumns: "repeat(12, minmax(0, 1fr))" }}>
+                            {HOURS.slice(0, 12).map((hour) => <div key={hour} className="border-r border-[#E8EDE9]" />)}
+                          </div>
+                          {dockSlots.map((slot) => {
+                            const style = slotStyles[slot.type] || slotStyles.Loading;
+                            const left = timeToPercent(slot.start);
+                            const right = timeToPercent(slot.end);
+                            const width = right - left;
+                            const slotKey = slot._id || slot.id;
+                            const isSelected = selectedSlotId === slotKey;
+                            return (
+                              <button
+                                key={slotKey}
+                                onClick={() => onSelectSlot(slotKey)}
+                                title={`${slot.id} · ${slot.type} · Dock ${dockNumber} · ${slot.start}–${slot.end}`}
+                                className={`absolute top-[6px] z-10 flex h-[46px] min-w-[55px] flex-col justify-center overflow-hidden rounded-lg px-3 text-left transition hover:brightness-[0.97] ${isSelected ? "ring-2 ring-[#173F35] ring-offset-1" : ""}`}
+                                style={{ left: `${left}%`, width: `${Math.max(width, 5)}%`, backgroundColor: style.bg, color: style.text }}
+                              >
+                                <span className="truncate text-xs font-bold">{slot.id}</span>
+                                <span className="truncate text-[10px]">{slot.type} · Dock {dockNumber}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </section>
               );
             })
           )}
@@ -241,7 +208,7 @@ const StoreTimeline = ({
       </div>
 
       <p className="mt-3 text-xs text-gray-400">
-        Select a reservation to view its details.
+        Select a reservation to view its details. Older reservations without a saved dock are placed on inferred lanes for clarity.
       </p>
     </div>
   );

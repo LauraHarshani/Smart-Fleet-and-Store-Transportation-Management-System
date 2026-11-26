@@ -56,6 +56,12 @@ const SlotDetails = ({ slot, selectedDate, onClose }) => {
         />
 
         <InfoItem
+          icon={Store}
+          label={slot.displayDockInferred ? "Display Dock (inferred)" : "Reserved Dock"}
+          value={(slot.displayDockNumber || slot.dockNumber) ? `Dock ${slot.displayDockNumber || slot.dockNumber}` : "Not individually assigned"}
+        />
+
+        <InfoItem
           icon={CalendarDays}
           label="Reservation Date"
           value={selectedDate}

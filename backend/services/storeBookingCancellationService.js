@@ -121,7 +121,7 @@ const cancelStoreBooking = async ({ bookingId, actorId, reason = '' }) => {
             const retainedSlots = activeSlots.filter((slot) => stopIds.has(slot.stopId.toString()));
             if (retainedSlots.length) {
               await checkSlotScheduleAvailability({
-                proposedSlots: retainedSlots.map((slot) => ({ store: slot.store, startAt: slot.startAt, endAt: slot.endAt })),
+                proposedSlots: retainedSlots.map((slot) => ({ store: slot.store, dockNumber: slot.dockNumber, startAt: slot.startAt, endAt: slot.endAt })),
                 replacedSlotIds,
                 session,
               });

@@ -8,6 +8,7 @@ const Trip = require("../models/trip");
 const {
   checkSlotAvailability,
   lockStoreReservations,
+  getAvailableDockNumbers,
 } = require("./conflictDetectionService");
 
 // Create a consistent error
@@ -50,6 +51,7 @@ const createSlotInSession = async (slotData = {}, session, storeScope = null) =>
     trip,
     stopId,
     vehicle,
+    dockNumber,
     operationType,
     startAt,
     endAt,
@@ -90,13 +92,20 @@ const createSlotInSession = async (slotData = {}, session, storeScope = null) =>
   }
 
   await lockStoreReservations(store, session);
-  await checkSlotAvailability({ storeId: store, startAt: start, endAt: end, session });
+  let assignedDockNumber = dockNumber;
+  if (assignedDockNumber === undefined || assignedDockNumber === null) {
+    const availability = await getAvailableDockNumbers({ storeId: store, startAt: start, endAt: end, session });
+    assignedDockNumber = availability.availableDockNumbers[0];
+    if (!assignedDockNumber) throw createError("No store dock is available during the requested time.", 409);
+  }
+  await checkSlotAvailability({ storeId: store, startAt: start, endAt: end, dockNumber: assignedDockNumber, session });
 
   const [newSlot] = await StoreSlot.create([{
     store,
     trip,
     stopId,
     vehicle: vehicle.trim(),
+    dockNumber: Number(assignedDockNumber),
     operationType,
     startAt: start,
     endAt: end,
@@ -150,7 +159,7 @@ const getSlots = async (filters = {}) => {
 
   return await StoreSlot.find(query)
     .populate("store", "name code docks")
-    .populate("trip", "id route status")
+    .populate("trip", "id route status driver")
     .sort({ startAt: 1 });
 };
 
@@ -162,7 +171,7 @@ const getSlotById = async (slotId, storeScope = null) => {
 
   const slot = await StoreSlot.findById(slotId)
     .populate("store", "name code docks")
-    .populate("trip", "id route status");
+    .populate("trip", "id route status driver");
 
   if (!slot) {
     throw createError("Slot reservation not found.", 404);
@@ -190,7 +199,7 @@ const updateSlot = async (slotId, updateData, storeScope = null) => {
       }
 
       await lockStoreReservations(slot.store, session);
-      const allowedFields = ["vehicle", "operationType", "startAt", "endAt", "notes"];
+      const allowedFields = ["vehicle", "dockNumber", "operationType", "startAt", "endAt", "notes"];
       allowedFields.forEach((field) => {
         if (updateData[field] !== undefined) slot[field] = updateData[field];
       });
@@ -201,6 +210,7 @@ const updateSlot = async (slotId, updateData, storeScope = null) => {
         startAt: start,
         endAt: end,
         excludeSlotId: slot._id,
+        dockNumber: slot.dockNumber,
         session,
       });
       await slot.save({ session });

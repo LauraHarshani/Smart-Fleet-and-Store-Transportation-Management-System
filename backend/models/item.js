@@ -6,6 +6,12 @@ const itemSchema = new mongoose.Schema({
   description: { type: String, default: 'Standard commercial catalog item', trim: true },
   category: { type: String, default: 'Dry Grocery / Export', trim: true },
   unitOfMeasure: { type: String, required: true, trim: true },
+  inventoryQuantity: {
+    type: Number,
+    default: 0,
+    min: [0, 'Inventory quantity cannot be negative'],
+    validate: { validator: Number.isInteger, message: 'Inventory quantity must be a whole number' },
+  },
   weightKg: { type: Number, default: 0, min: 0 },
   isHazardous: { type: Boolean, default: false },
   status: {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarClock, CheckCircle2, Loader2, PackageCheck, RefreshCw, Truck } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Loader2, PackageCheck, RefreshCw, Truck, Warehouse } from 'lucide-react';
 import api from '../../services/api';
 import { getAllVehicles } from '../../services/vehicleService';
 
@@ -31,6 +31,11 @@ const TripPlanner = () => {
   const [bookingId, setBookingId] = useState('');
   const [vehicleId, setVehicleId] = useState('');
   const [times, setTimes] = useState(() => defaultTimes(null));
+  const [pickupDocks, setPickupDocks] = useState([]);
+  const [destinationDocks, setDestinationDocks] = useState([]);
+  const [pickupDock, setPickupDock] = useState('');
+  const [destinationDock, setDestinationDock] = useState('');
+  const [dockLoading, setDockLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -68,6 +73,43 @@ const TripPlanner = () => {
     const initialLoad = window.setTimeout(() => { void loadOptions(false); }, 0);
     return () => window.clearTimeout(initialLoad);
   }, [loadOptions]);
+
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      if (!selectedBooking || !times.pickupStart || !times.pickupEnd || !times.deliveryStart || !times.deliveryEnd) {
+        setPickupDocks([]);
+        setDestinationDocks([]);
+        setPickupDock('');
+        setDestinationDock('');
+        return;
+      }
+      setDockLoading(true);
+      try {
+        const [pickupResponse, destinationResponse] = await Promise.all([
+          api.get('/store-slots/availability/docks', { params: { store: selectedBooking.pickupStore?._id, startAt: new Date(times.pickupStart).toISOString(), endAt: new Date(times.pickupEnd).toISOString() } }),
+          api.get('/store-slots/availability/docks', { params: { store: selectedBooking.destinationStore?._id, startAt: new Date(times.deliveryStart).toISOString(), endAt: new Date(times.deliveryEnd).toISOString() } }),
+        ]);
+        if (!active) return;
+        const pickupAvailable = pickupResponse.data.availableDockNumbers || [];
+        const destinationAvailable = destinationResponse.data.availableDockNumbers || [];
+        setPickupDocks(pickupAvailable);
+        setDestinationDocks(destinationAvailable);
+        setPickupDock((current) => pickupAvailable.includes(Number(current)) ? current : String(pickupAvailable[0] || ''));
+        setDestinationDock((current) => destinationAvailable.includes(Number(current)) ? current : String(destinationAvailable[0] || ''));
+      } catch (dockError) {
+        if (!active) return;
+        setPickupDocks([]);
+        setDestinationDocks([]);
+        setPickupDock('');
+        setDestinationDock('');
+        setError(dockError.response?.data?.message || 'Unable to check available store docks for these times.');
+      } finally {
+        if (active) setDockLoading(false);
+      }
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [selectedBooking, times.pickupStart, times.pickupEnd, times.deliveryStart, times.deliveryEnd]);
   const setTime = (key, value) => setTimes((current) => ({ ...current, [key]: value }));
 
   const selectBooking = (nextBookingId) => {
@@ -86,8 +128,8 @@ const TripPlanner = () => {
       const { data } = await api.post('/trips/allocate-store-booking', {
         bookingId,
         vehicleId,
-        pickupSlot: { startAt: new Date(times.pickupStart).toISOString(), endAt: new Date(times.pickupEnd).toISOString() },
-        destinationSlot: { startAt: new Date(times.deliveryStart).toISOString(), endAt: new Date(times.deliveryEnd).toISOString() },
+        pickupSlot: { startAt: new Date(times.pickupStart).toISOString(), endAt: new Date(times.pickupEnd).toISOString(), dockNumber: Number(pickupDock) },
+        destinationSlot: { startAt: new Date(times.deliveryStart).toISOString(), endAt: new Date(times.deliveryEnd).toISOString(), dockNumber: Number(destinationDock) },
       });
       setSuccess(`${data.trip.id} created for ${selectedBooking.bookingCode || 'the booking'} with ${selectedVehicle.registrationNumber}. Pickup and destination slots are reserved.`);
       await loadOptions();
@@ -145,16 +187,18 @@ const TripPlanner = () => {
           </section>
 
           <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-4"><CalendarClock className="text-[#27866A]" /><div><h2 className="font-bold text-slate-900">Reserve store slots</h2><p className="text-xs text-slate-500">The server checks operating hours, dock capacity, and conflicts.</p></div></div>
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-4"><CalendarClock className="text-[#27866A]" /><div><h2 className="font-bold text-slate-900">Reserve store slots</h2><p className="text-xs text-slate-500">Choose a free dock at each store. Availability is checked again when you save.</p></div></div>
             <div className="rounded-lg border border-slate-100 p-4">
               <h3 className="text-sm font-bold text-slate-800">Pickup · Loading</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">Start<input required type="datetime-local" value={times.pickupStart} onChange={(event) => setTime('pickupStart', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-800" /></label><label className="text-xs font-semibold text-slate-600">End<input required type="datetime-local" value={times.pickupEnd} onChange={(event) => setTime('pickupEnd', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-800" /></label></div>
+              <label className="mt-3 block text-xs font-semibold text-slate-600"><span className="inline-flex items-center gap-1"><Warehouse size={14} /> Loading dock</span><select required value={pickupDock} onChange={(event) => setPickupDock(event.target.value)} disabled={dockLoading || !pickupDocks.length} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-800 disabled:bg-slate-100"><option value="">{dockLoading ? 'Checking docks…' : pickupDocks.length ? 'Choose a dock' : 'No dock available for this time'}</option>{pickupDocks.map((dock) => <option key={dock} value={dock}>Dock {dock}</option>)}</select></label>
             </div>
             <div className="rounded-lg border border-slate-100 p-4">
               <h3 className="text-sm font-bold text-slate-800">Destination · Unloading</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">Start<input required type="datetime-local" value={times.deliveryStart} onChange={(event) => setTime('deliveryStart', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-800" /></label><label className="text-xs font-semibold text-slate-600">End<input required type="datetime-local" value={times.deliveryEnd} onChange={(event) => setTime('deliveryEnd', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-sm text-slate-800" /></label></div>
+              <label className="mt-3 block text-xs font-semibold text-slate-600"><span className="inline-flex items-center gap-1"><Warehouse size={14} /> Unloading dock</span><select required value={destinationDock} onChange={(event) => setDestinationDock(event.target.value)} disabled={dockLoading || !destinationDocks.length} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-800 disabled:bg-slate-100"><option value="">{dockLoading ? 'Checking docks…' : destinationDocks.length ? 'Choose a dock' : 'No dock available for this time'}</option>{destinationDocks.map((dock) => <option key={dock} value={dock}>Dock {dock}</option>)}</select></label>
             </div>
-            <button type="submit" disabled={saving || !selectedBooking || !selectedVehicle} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#173F35] px-5 py-3 text-sm font-bold text-white hover:bg-[#0F2C25] disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="submit" disabled={saving || dockLoading || !selectedBooking || !selectedVehicle || !pickupDock || !destinationDock} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#173F35] px-5 py-3 text-sm font-bold text-white hover:bg-[#0F2C25] disabled:cursor-not-allowed disabled:opacity-50">
               {saving ? <Loader2 size={17} className="animate-spin" /> : <Truck size={17} />}
               {saving ? 'Allocating trip and reserving slots…' : 'Allocate vehicle & reserve slots'}
             </button>

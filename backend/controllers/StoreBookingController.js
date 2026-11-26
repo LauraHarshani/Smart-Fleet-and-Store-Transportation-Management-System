@@ -99,6 +99,17 @@ const checkUserRoleAndStoreScope = (req, booking, { allowedRoles = null, checkBo
   return null;
 };
 
+const checkStoreParticipatesInRoute = (req, pickupStore, destinationStore) => {
+  if (!req.user || isAdminUser(req)) return null;
+  const assignedStoreId = req.user.storeId;
+  if (!assignedStoreId || !isValidId(assignedStoreId)) return 'No store has been assigned to your account';
+  const assignedId = assignedStoreId.toString();
+  if (storeRefId(pickupStore) !== assignedId && storeRefId(destinationStore) !== assignedId) {
+    return 'Your assigned store must be either the pickup store or the destination store';
+  }
+  return null;
+};
+
 const validateStoresAndItems = async ({ pickupStore, destinationStore, requestedPickupDate, items }) => {
   if (!pickupStore || !isValidId(pickupStore)) {
     return 'Valid pickupStore ID is required';
@@ -185,18 +196,8 @@ exports.createStoreBooking = async (req, res) => {
       return res.status(400).json({ message: errorMsg });
     }
 
-    if (req.user) {
-      const rawRole = (req.user.role || '').toString().toLowerCase();
-      const isAdmin = ['admin', 'system administrator', 'administrator'].includes(rawRole);
-      const userStoreId = req.user.storeId;
-      if (!isAdmin && (!userStoreId || userStoreId.toString() !== pickupStore.toString())) {
-        return res.status(403).json({
-          message: userStoreId
-            ? 'You can only create bookings from your assigned store'
-            : 'No store has been assigned to your account',
-        });
-      }
-    }
+    const routeScopeError = checkStoreParticipatesInRoute(req, pickupStore, destinationStore);
+    if (routeScopeError) return res.status(403).json({ message: routeScopeError });
 
     const booking = new StoreBooking({
       pickupStore,
@@ -351,6 +352,8 @@ exports.updateStoreBooking = async (req, res) => {
     if (errorMsg) {
       return res.status(400).json({ message: errorMsg });
     }
+    const routeScopeError = checkStoreParticipatesInRoute(req, nextPickup, nextDest);
+    if (routeScopeError) return res.status(403).json({ message: routeScopeError });
 
     const currentStatus = booking.status;
     booking.pickupStore = nextPickup;
