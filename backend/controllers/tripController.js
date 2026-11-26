@@ -3,6 +3,29 @@ const Trip = require('../models/trip');
 const Booking = require('../models/booking');
 const { rescheduleTripSlots } = require('../services/reschedulingService');
 
+const getTrips = async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.date) {
+      const date = new Date(req.query.date);
+      if (Number.isNaN(date.getTime())) {
+        return res.status(400).json({ success: false, message: 'A valid date filter is required.' });
+      }
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      filter.date = { $gte: start, $lt: end };
+    }
+    const trips = await Trip.find(filter).sort({ date: 1, start: 1, createdAt: -1 });
+    return res.status(200).json({ success: true, count: trips.length, trips });
+  } catch (error) {
+    console.error('getTrips error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to retrieve trips.' });
+  }
+};
+
 const reportTripDelay = async (req, res) => {
   const delayMinutes = Number(req.body?.delayMinutes);
   if (!Number.isFinite(delayMinutes) || delayMinutes <= 0) {
@@ -133,4 +156,4 @@ const createTrip = async (req, res) => {
   }
 };
 
-module.exports = { createTrip, reportTripDelay };
+module.exports = { getTrips, createTrip, reportTripDelay };
