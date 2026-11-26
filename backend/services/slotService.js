@@ -135,7 +135,7 @@ const getSlots = async (filters = {}) => {
   }
 
   return await StoreSlot.find(query)
-    .populate("store", "name code")
+    .populate("store", "name code docks")
     .populate("trip", "id route status")
     .sort({ startAt: 1 });
 };
@@ -147,7 +147,7 @@ const getSlotById = async (slotId, storeScope = null) => {
   }
 
   const slot = await StoreSlot.findById(slotId)
-    .populate("store", "name code")
+    .populate("store", "name code docks")
     .populate("trip", "id route status");
 
   if (!slot) {
