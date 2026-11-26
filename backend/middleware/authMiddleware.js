@@ -1,6 +1,25 @@
 
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const AuthUser = require("../models/authUser");
+const Store = require("../models/store");
+
+const resolveStoreId = async (storeValue) => {
+    if (!storeValue) return null;
+
+    const assignedStore = storeValue.toString().trim();
+    if (mongoose.Types.ObjectId.isValid(assignedStore)) return assignedStore;
+
+    const store = await Store.findOne({
+        $or: [
+            { name: assignedStore },
+            { code: assignedStore },
+            { id: assignedStore }
+        ]
+    }).select("_id").lean();
+
+    return store?._id.toString() || null;
+};
 
 const protect = async (req, res, next) => {
     try {
@@ -43,12 +62,26 @@ const protect = async (req, res, next) => {
             });
         }
 
+        let storeId = null;
+        if (user.role !== "ADMIN") {
+            try {
+                storeId = await resolveStoreId(user.store);
+            } catch (error) {
+                console.error("Assigned store lookup error:", error);
+                return res.status(500).json({
+                    success: false,
+                    message: "Unable to verify your assigned store"
+                });
+            }
+        }
+
         // Attach authenticated user information to the request
         req.user = {
             userId: user._id.toString(),
             id: user.id,
             role: user.role,
-            store: user.store
+            storeId,
+            store: storeId
         };
         req.auth = { persistent: Boolean(decoded.persistent) };
 
