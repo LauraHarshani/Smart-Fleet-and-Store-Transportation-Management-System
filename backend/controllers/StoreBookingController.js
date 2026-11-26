@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { StoreBooking } = require('../models/StoreBooking');
+const { cancelStoreBooking: cancelStoreBookingAndRevalidate } = require('../services/storeBookingCancellationService');
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -488,6 +489,19 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
     const actorId =
       body.reviewedBy || body.updatedBy || req.user?._id || req.user?.id || booking.requestedBy;
     const prevStatus = booking.status;
+
+    if (targetStatus === 'Cancelled') {
+      const result = await cancelStoreBookingAndRevalidate({
+        bookingId: booking._id,
+        actorId,
+        reason,
+      });
+      return res.status(200).json({
+        message: 'Booking cancelled and linked trip reservations revalidated',
+        booking: result.booking,
+        trip: result.trip,
+      });
+    }
 
     booking.status = targetStatus;
     if (['Approved', 'Rejected', 'Changes Requested'].includes(targetStatus)) {
