@@ -585,8 +585,8 @@ exports.rejectBooking = (req, res) =>
 exports.requestBookingChanges = (req, res) =>
   transitionStatus(req, res, 'Changes Requested', 'CHANGES_REQUESTED', ['store manager', 'admin']);
 exports.startBooking = (req, res) =>
-  transitionStatus(req, res, 'In Progress', 'IN_PROGRESS', ['store manager', 'admin']);
+  transitionStatus(req, res, 'In Progress', 'IN_PROGRESS', ['store employee', 'store manager', 'admin']);
 exports.completeBooking = (req, res) =>
-  transitionStatus(req, res, 'Completed', 'COMPLETED', ['store manager', 'admin']);
+  transitionStatus(req, res, 'Completed', 'COMPLETED', ['store employee', 'store manager', 'admin']);
 exports.cancelStoreBooking = (req, res) =>
   transitionStatus(req, res, 'Cancelled', 'CANCELLED', ['store employee', 'store manager', 'admin']);

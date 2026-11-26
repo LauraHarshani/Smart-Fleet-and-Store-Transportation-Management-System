@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   Layers,
   ArrowUp,
@@ -11,212 +13,6 @@ import {
   Eye,
   Package,
 } from "lucide-react";
-
-const CURRENT_STORE = "Colombo Store";
-
-const initialBookings = [
-  {
-    id: "BK-256",
-    origin: "Colombo Store",
-    destination: "Kandy Store",
-    route: "Colombo → Kandy",
-    itemCount: 3,
-    scheduledPickup: "06 Nov 2026",
-    pickupTime: "10:00 AM",
-    direction: "sending",
-    status: "Awaiting Preparation",
-    vehicle: "VH-020",
-    driver: "Minindu Rajapaksha",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 10, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-258",
-    origin: "Colombo Store",
-    destination: "Kandy Store",
-    route: "Colombo → Kandy",
-    itemCount: 3,
-    scheduledPickup: "06 Nov 2026",
-    pickupTime: "03:00 PM",
-    direction: "sending",
-    status: "Awaiting Handover",
-    vehicle: "VH-021",
-    driver: "Kasun Perera",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 15 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 12 },
-    ],
-  },
-  {
-    id: "BK-259",
-    origin: "Galle Store",
-    destination: "Colombo Store",
-    route: "Galle → Colombo",
-    itemCount: 3,
-    scheduledPickup: "08 Nov 2026",
-    pickupTime: "11:00 AM",
-    direction: "receiving",
-    status: "In Transit",
-    vehicle: "VH-022",
-    driver: "Nimal Fernando",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 12 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 25 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 18 },
-    ],
-  },
-  {
-    id: "BK-265",
-    origin: "Colombo Store",
-    destination: "Galle Store",
-    route: "Colombo → Galle",
-    itemCount: 3,
-    scheduledPickup: "09 Nov 2026",
-    pickupTime: "02:00 PM",
-    direction: "sending",
-    status: "Awaiting Handover",
-    vehicle: "VH-023",
-    driver: "Amila Silva",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 20 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 30 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 25 },
-    ],
-  },
-  {
-    id: "BK-285",
-    origin: "Kandy Store",
-    destination: "Colombo Store",
-    route: "Kandy → Colombo",
-    itemCount: 3,
-    scheduledPickup: "10 Nov 2026",
-    pickupTime: "08:00 AM",
-    direction: "receiving",
-    status: "Completed",
-    vehicle: "VH-024",
-    driver: "Ruwan Jayasinghe",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-286",
-    origin: "Galle Store",
-    destination: "Colombo Store",
-    route: "Galle → Colombo",
-    itemCount: 3,
-    scheduledPickup: "10 Nov 2026",
-    pickupTime: "08:00 AM",
-    direction: "receiving",
-    status: "Awaiting Confirmation",
-    vehicle: "VH-025",
-    driver: "Dilan Perera",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-287",
-    origin: "Colombo Store",
-    destination: "Kandy Store",
-    route: "Colombo → Kandy",
-    itemCount: 3,
-    scheduledPickup: "10 Nov 2026",
-    pickupTime: "08:00 AM",
-    direction: "sending",
-    status: "Awaiting Receipt",
-    vehicle: "VH-026",
-    driver: "Sahan Perera",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-288",
-    origin: "Kandy Store",
-    destination: "Colombo Store",
-    route: "Kandy → Colombo",
-    itemCount: 3,
-    scheduledPickup: "15 Nov 2026",
-    pickupTime: "09:00 AM",
-    direction: "receiving",
-    status: "Awaiting Dispatch",
-    vehicle: "VH-027",
-    driver: "Kasun Perera",
-    itemDetails: [
-      { id: 1, name: "Rice 5kg", inventory: 20, requested: 20 },
-      { id: 2, name: "Cooking Oil 1L", inventory: 15, requested: 15 },
-      { id: 3, name: "Sugar 1kg", inventory: 25, requested: 25 },
-    ],
-  }
-];
-
-// Derive the direction from the route if it is not already present.
-const getDirection = (booking) => {
-  if (booking.origin === CURRENT_STORE) return "sending";
-  if (booking.destination === CURRENT_STORE) return "receiving";
-  return booking.direction || "sending";
-};
-
-// Convert older demo statuses to the new workflow.
-const migrateBooking = (booking) => {
-  const direction = getDirection(booking);
-  let status = booking.status;
-
-  if (direction === "sending") {
-    const statusMap = {
-      Prepared: "Awaiting Handover",
-      "Handed Over": "Awaiting Receipt",
-      "In Transit": "Awaiting Receipt",
-    };
-
-    status = statusMap[status] || status;
-  } else {
-    const statusMap = {
-      "Awaiting Preparation": "Awaiting Dispatch",
-      Prepared: "Awaiting Dispatch",
-      "Awaiting Handover": "Awaiting Dispatch",
-      "Handed Over": "In Transit",
-      "Awaiting Receipt": "Awaiting Confirmation",
-    };
-
-    status = statusMap[status] || status;
-  }
-
-  return {
-    ...booking,
-    direction,
-    route:
-      direction === "sending"
-        ? `${booking.origin.replace(" Store", "")} → ${booking.destination.replace(" Store", "")}`
-        : `${booking.origin.replace(" Store", "")} → ${booking.destination.replace(" Store", "")}`,
-    status,
-  };
-};
-
-const getInitialBookings = () => {
-  try {
-    const saved = localStorage.getItem("goodsBookings");
-    const source = saved ? JSON.parse(saved) : initialBookings;
-    const migrated = source.map(migrateBooking);
-
-    localStorage.setItem("goodsBookings", JSON.stringify(migrated));
-    return migrated;
-  } catch (error) {
-    console.error("Unable to load goods bookings:", error);
-    return initialBookings.map(migrateBooking);
-  }
-};
 
 const sendingStatuses = [
   "Awaiting Preparation",
@@ -251,8 +47,11 @@ const tabs = [
 
 const GoodsHandling = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const [bookings, setBookings] = useState(getInitialBookings);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All Statuses");
@@ -262,6 +61,51 @@ const GoodsHandling = () => {
   // Pagination: display 8 bookings per page.
   const [currentPage, setCurrentPage] = useState(1);
   const bookingsPerPage = 8;
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api.get("/store-bookings")
+      .then(({ data }) => {
+        if (!active) return;
+        const storeId = String(user?.storeId || user?.store?._id || user?.store || "");
+        const records = (data.bookings || []).map((record) => {
+          const origin = record.pickupStore?.name || "Pickup store";
+          const destination = record.destinationStore?.name || "Destination store";
+          const direction = String(record.pickupStore?._id || record.pickupStore) === storeId ? "sending" : "receiving";
+          const workflowStatus = record.status === "Completed" ? "Completed"
+            : record.status === "In Progress" ? (direction === "sending" ? "Awaiting Receipt" : "In Transit")
+              : record.status === "Approved" ? (direction === "sending" ? "Awaiting Handover" : "Awaiting Dispatch")
+                : record.status === "Rejected" || record.status === "Cancelled" ? record.status : "Awaiting Preparation";
+          const date = record.requestedPickupDate ? new Date(record.requestedPickupDate) : null;
+          return {
+            ...record,
+            id: record._id,
+            displayId: record.bookingCode || record._id,
+            origin, destination,
+            route: `${origin.replace(/ Store$/i, "")} → ${destination.replace(/ Store$/i, "")}`,
+            direction,
+            status: workflowStatus,
+            itemCount: record.items?.length || 0,
+            scheduledPickup: date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—",
+            pickupTime: record.requestedTimeWindow?.startTime || "",
+            itemDetails: (record.items || []).map((line) => ({
+              id: line._id, lineId: line._id, item: line.item?._id || line.item,
+              name: line.item?.name || "Item", requested: line.quantity,
+              prepared: line.handedOverQuantity, received: line.receivedQuantity,
+              handedOver: line.handedOverQuantity,
+            })),
+          };
+        });
+        setBookings(records);
+        setLoadError("");
+      })
+      .catch((error) => {
+        if (active) setLoadError(error.response?.data?.message || "Unable to load goods handling bookings.");
+      })
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [user?.storeId, user?.store]);
 
   const sendingCount = bookings.filter(
     (booking) =>
@@ -294,7 +138,7 @@ const GoodsHandling = () => {
           booking.status !== "Completed") ||
         (activeTab === "completed" && booking.status === "Completed");
 
-      const matchesSearch = booking.id
+      const matchesSearch = booking.displayId
         .toLowerCase()
         .includes(searchTerm.toLowerCase().trim());
 
@@ -403,6 +247,8 @@ const GoodsHandling = () => {
 
       {/* Table */}
       <div className="min-h-[560px] rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+        {loadError && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</p>}
+        {loading && <p className="mb-4 text-sm text-slate-500">Loading bookings…</p>}
         {/* Filters */}
         <div className="mb-6 flex flex-wrap items-center gap-2.5">
           <div className="relative w-full sm:w-[283px]">
@@ -512,7 +358,7 @@ const GoodsHandling = () => {
                     className="border-b border-slate-200 text-sm transition hover:bg-slate-50/70"
                   >
                     <td className="whitespace-nowrap px-4 py-4 font-semibold text-gray-900">
-                      {booking.id}
+                        {booking.displayId}
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-gray-800">
                       {booking.route}
@@ -538,7 +384,7 @@ const GoodsHandling = () => {
                         type="button"
                         onClick={() => handleViewBooking(booking)}
                         title="View goods confirmation"
-                        aria-label={`View ${booking.id} goods confirmation`}
+                        aria-label={`View ${booking.displayId} goods confirmation`}
                         className="rounded-md p-1.5 text-gray-500 transition hover:bg-emerald-50 hover:text-[#078A68]"
                       >
                         <Eye size={21} strokeWidth={2} />

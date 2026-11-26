@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   CalendarClock,
@@ -16,6 +16,8 @@ import GoodsProgress from "../../components/goods/GoodsProgress";
 import GoodsPreparationTable from "../../components/goods/GoodsPreparationTable";
 import GoodsHandoverTable from "../../components/goods/GoodsHandoverTable";
 import GoodsReceivedTable from "../../components/goods/GoodsReceivedTable";
+import api from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
 
 const sampleBooking = {
   id: "BK-256",
@@ -35,34 +37,51 @@ const sampleBooking = {
   ],
 };
 
-const getSavedBooking = (bookingId) => {
-  try {
-    const savedBookings = JSON.parse(
-      localStorage.getItem("goodsBookings") || "[]"
-    );
-    return savedBookings.find((item) => item.id === bookingId);
-  } catch {
-    return null;
-  }
-};
-
 const GoodsConfirmation = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { bookingId } = useParams();
+  const { user } = useAuth();
+  const [booking, setBooking] = useState(location.state?.booking || { ...sampleBooking, id: bookingId });
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const booking = useMemo(() => {
-    return (
-      location.state?.booking ||
-      getSavedBooking(bookingId) || {
-        ...sampleBooking,
-        id: bookingId || sampleBooking.id,
-      }
-    );
-  }, [location.state, bookingId]);
+  useEffect(() => {
+    let active = true;
+    api.get(`/store-bookings/${bookingId}`)
+      .then(({ data }) => {
+        if (!active) return;
+        const record = data.booking;
+        const storeId = String(user?.storeId || user?.store?._id || user?.store || "");
+        const origin = record.pickupStore?.name || "Pickup store";
+        const destination = record.destinationStore?.name || "Destination store";
+        setBooking({
+          ...record,
+          id: record._id,
+          displayId: record.bookingCode || record._id,
+          direction: String(record.pickupStore?._id || record.pickupStore) === storeId ? "sending" : "receiving",
+          origin, destination,
+          route: `${origin} → ${destination}`,
+          status: record.status,
+          scheduledPickup: record.requestedPickupDate,
+          pickupTime: record.requestedTimeWindow?.startTime || "",
+          itemDetails: (record.items || []).map((line) => ({
+            id: line._id, lineId: line._id, item: line.item?._id || line.item,
+            name: line.item?.name || "Item", requested: line.quantity,
+            inventory: line.quantity, prepared: line.handedOverQuantity,
+            handedOver: line.handedOverQuantity, received: line.receivedQuantity,
+          })),
+        });
+        setLoadError("");
+      })
+      .catch((error) => active && setLoadError(error.response?.data?.message || "Unable to load this booking."))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [bookingId, user?.storeId, user?.store]);
 
   const isReceiving = booking.direction === "receiving";
-  const [currentStatus, setCurrentStatus] = useState(booking.status);
+  const [currentStatus, setCurrentStatus] = useState(booking.status || "Submitted");
   const goodsDetails = (booking.itemDetails || sampleBooking.itemDetails).map(
     (item, index) => ({
       id: item.id || index + 1,
@@ -76,17 +95,18 @@ const GoodsConfirmation = () => {
 
   const initialStage = useMemo(() => {
     if (isReceiving) {
-      if (booking.status === "Awaiting Dispatch") return 1;
-      if (booking.status === "In Transit") return 2;
+      if (["Draft", "Submitted", "Approved"].includes(booking.status)) return 1;
+      if (booking.status === "In Progress") return 3;
       return 3;
     }
 
-    if (booking.status === "Awaiting Preparation") return 1;
-    if (booking.status === "Awaiting Handover") return 2;
+    if (["Draft", "Submitted", "Changes Requested"].includes(booking.status)) return 1;
+    if (booking.status === "Approved") return 2;
     return 3;
   }, [booking.status, isReceiving]);
 
   const [currentStage, setCurrentStage] = useState(initialStage);
+  useEffect(() => { setCurrentStage(initialStage); }, [initialStage]);
   const [preparationNote, setPreparationNote] = useState("");
   const [handoverNote, setHandoverNote] = useState("");
   const [receiptNote, setReceiptNote] = useState("");
@@ -122,12 +142,27 @@ const GoodsConfirmation = () => {
     }))
   );
 
+  useEffect(() => {
+    if (!booking?.items && !booking?.itemDetails) return;
+    setCurrentStatus(booking.status || "Submitted");
+    const lines = booking.itemDetails || [];
+    setHandoverItems(lines.map((item, index) => ({
+      id: item.id || index + 1,
+      name: item.name,
+      requested: Number(item.requested ?? 0),
+      actual: Number(item.prepared ?? item.handedOver ?? item.requested ?? 0),
+    })));
+    setReceivedItems(lines.map((item, index) => ({
+      id: item.id || index + 1,
+      name: item.name,
+      handedOver: Number(item.prepared ?? item.handedOver ?? item.requested ?? 0),
+      received: Number(item.received ?? item.prepared ?? item.handedOver ?? item.requested ?? 0),
+    })));
+  }, [booking]);
+
   const isCompleted = currentStatus === "Completed";
-  const isReceivingWaiting =
-    isReceiving &&
-    (currentStatus === "Awaiting Dispatch" || currentStatus === "In Transit");
-  const isSendingWaiting =
-    !isReceiving && currentStatus === "Awaiting Receipt";
+  const isReceivingWaiting = isReceiving && ["Draft", "Submitted", "Approved"].includes(currentStatus);
+  const isSendingWaiting = !isReceiving && currentStatus === "In Progress";
 
   const allItemsReady = preparationItems.every(
     (item) => item.inventory >= item.requested
@@ -147,39 +182,46 @@ const GoodsConfirmation = () => {
       Number(item.received) >= 0
   );
 
-  // Save the current booking status and item quantities.
-  const updateBooking = (newStatus, updatedItems = null) => {
+  const updateBooking = async (newStatus, updatedItems = [], reason = "") => {
+    setSaving(true);
     try {
-      const savedBookings = JSON.parse(
-        localStorage.getItem("goodsBookings") || "[]"
-      );
-      const existingIndex = savedBookings.findIndex(
-        (item) => item.id === booking.id
-      );
-
-      const updatedBooking = {
-        ...booking,
-        direction: booking.direction,
-        status: newStatus,
-        ...(updatedItems ? { itemDetails: updatedItems } : {}),
-      };
-
-      if (existingIndex >= 0) {
-        savedBookings[existingIndex] = {
-          ...savedBookings[existingIndex],
-          ...updatedBooking,
-        };
-      } else {
-        savedBookings.push(updatedBooking);
+      const items = updatedItems.map((item) => ({
+        lineId: item.id,
+        ...(newStatus === "Completed"
+          ? { receivedQuantity: Number(item.received) }
+          : { handedOverQuantity: Number(item.actual) }),
+      }));
+      const { data } = await api.patch(`/store-bookings/${booking.id}/handover-receipt`, {
+        items,
+        reason: reason.trim() || (newStatus === "Completed" ? "Goods receipt confirmed" : "Goods handed over"),
+      });
+      let updatedBooking = data.booking;
+      if (newStatus !== "Completed" && updatedBooking.status === "Approved") {
+        const started = await api.patch(`/store-bookings/${booking.id}/start`, { reason: reason.trim() || "Goods handed over; trip started" });
+        updatedBooking = started.data.booking;
       }
-
-      localStorage.setItem("goodsBookings", JSON.stringify(savedBookings));
-      setCurrentStatus(newStatus);
+      if (newStatus === "Completed") {
+        const completion = await api.patch(`/store-bookings/${booking.id}/complete`, { reason: reason.trim() || "Goods receipt confirmed" });
+        updatedBooking = completion.data.booking;
+      }
+      setBooking((current) => ({
+        ...current,
+        ...updatedBooking,
+        id: updatedBooking._id,
+        status: updatedBooking.status,
+        itemDetails: (updatedBooking.items || []).map((line) => ({
+          id: line._id, name: line.item?.name || current.itemDetails?.find((entry) => entry.id === line._id)?.name || "Item",
+          requested: line.quantity, prepared: line.handedOverQuantity,
+          handedOver: line.handedOverQuantity, received: line.receivedQuantity,
+        })),
+      }));
+      setCurrentStatus(updatedBooking.status);
       return true;
     } catch (error) {
-      console.error("Unable to save goods booking:", error);
-      alert("Unable to save the booking status.");
+      alert(error.response?.data?.message || "Unable to save goods confirmation.");
       return false;
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -212,13 +254,11 @@ const GoodsConfirmation = () => {
       current.map((item) => ({ ...item, actual: item.requested }))
     );
 
-    if (updateBooking("Awaiting Handover")) {
-      setCurrentStage(2);
-    }
+    setCurrentStage(2);
   };
 
   // Sending store: Awaiting Handover -> Awaiting Receipt.
-  const handleHandover = () => {
+  const handleHandover = async () => {
     if (isReceiving) return;
 
     if (!validHandoverQuantities) {
@@ -226,14 +266,7 @@ const GoodsConfirmation = () => {
       return;
     }
 
-    const updatedItems = handoverItems.map((item) => ({
-      id: item.id,
-      name: item.name,
-      requested: item.requested,
-      prepared: Number(item.actual),
-    }));
-
-    if (updateBooking("Awaiting Receipt", updatedItems)) {
+    if (await updateBooking("Awaiting Receipt", handoverItems, handoverNote)) {
       setReceivedItems(
         handoverItems.map((item) => ({
           id: item.id,
@@ -247,39 +280,40 @@ const GoodsConfirmation = () => {
   };
 
   // Receiving store: In Transit -> Awaiting Confirmation.
-  const handleGoodsArrival = () => {
-    if (!isReceiving || currentStatus !== "In Transit") return;
-
-    if (updateBooking("Awaiting Confirmation")) {
+  const handleGoodsArrival = async () => {
+    const storeId = String(user?.storeId || user?.store?._id || user?.store || "");
+    const destinationStop = booking.stops?.find((stop) =>
+      stop.stopType === "DROP" && String(stop.store?._id || stop.store) === storeId
+    );
+    if (!destinationStop) {
+      alert("No destination stop is configured for this booking.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await api.patch(`/store-bookings/${booking.id}/stops/${destinationStop._id}`, {
+        status: "Arrived",
+        notes: "Goods arrival confirmed by store",
+      });
+      setBooking((current) => ({ ...current, ...data.booking }));
       setCurrentStage(3);
-      alert(
-        "Goods arrival confirmed. You can now verify the received quantities."
-      );
+    } catch (error) {
+      alert(error.response?.data?.message || "Unable to record goods arrival.");
+    } finally {
+      setSaving(false);
     }
   };
 
   // Only the receiving store can confirm receipt and complete the booking.
-  const handleReceipt = () => {
-    if (!isReceiving || currentStatus !== "Awaiting Confirmation") return;
+  const handleReceipt = async () => {
+    if (!isReceiving || currentStatus !== "In Progress") return;
 
     if (!validReceivedQuantities) {
       alert("Please enter valid received quantities for all items.");
       return;
     }
 
-    const updatedItems = receivedItems.map((item) => ({
-      id: item.id,
-      name: item.name,
-      requested:
-        booking.itemDetails?.find((original) => original.id === item.id)
-          ?.requested ?? item.handedOver,
-      prepared: item.handedOver,
-      received: Number(item.received),
-    }));
-
-    if (updateBooking("Completed", updatedItems)) {
-      alert("Goods receipt confirmed successfully.");
-    }
+    if (await updateBooking("Completed", receivedItems, receiptNote)) alert("Goods receipt confirmed successfully.");
   };
 
   const handleCancel = () => {
@@ -297,7 +331,7 @@ const GoodsConfirmation = () => {
       note: preparationNote,
       setNote: setPreparationNote,
       action: handlePreparation,
-      disabled: !allItemsReady || isReceiving,
+      disabled: !allItemsReady || isReceiving || currentStatus !== "Approved" || saving,
     },
     2: {
       title: isReceiving ? "Goods In Transit" : "Goods Handover",
@@ -309,7 +343,7 @@ const GoodsConfirmation = () => {
       note: handoverNote,
       setNote: setHandoverNote,
       action: handleHandover,
-      disabled: !validHandoverQuantities || isReceiving,
+      disabled: !validHandoverQuantities || isReceiving || currentStatus !== "Approved" || saving,
     },
     3: {
       title: isReceiving ? "Goods Received" : "Awaiting Receipt Confirmation",
@@ -321,11 +355,21 @@ const GoodsConfirmation = () => {
       note: receiptNote,
       setNote: setReceiptNote,
       action: handleReceipt,
-      disabled: !isReceiving || !validReceivedQuantities,
+      disabled: !isReceiving || currentStatus !== "In Progress" || !validReceivedQuantities || saving,
     },
   };
 
   const currentDetails = stageDetails[currentStage] || stageDetails[1];
+
+  if (loading) return <div className="p-8 text-sm text-slate-500">Loading booking…</div>;
+  if (loadError || !booking?._id) {
+    return (
+      <div className="mx-auto max-w-[900px] rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        <p>{loadError || "Booking not found."}</p>
+        <button type="button" onClick={handleCancel} className="mt-4 font-semibold underline">Back to Goods Handling</button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -343,13 +387,15 @@ const GoodsConfirmation = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-[26px] font-bold tracking-tight text-gray-950">
-              {booking.id} - Goods Confirmation
+              {booking.displayId || booking.id} - Goods Confirmation
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               {currentDetails.description}
             </p>
           </div>
 
+          {loading && <span className="text-sm text-slate-500">Loading booking…</span>}
+          {loadError && <span className="text-sm text-red-600">{loadError}</span>}
           {isCompleted && (
             <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-4 py-2 text-sm font-semibold text-green-800">
               <CheckCircle2 size={17} />
@@ -429,7 +475,7 @@ const GoodsConfirmation = () => {
       )}
 
       {/* Receiving store: goods in transit */}
-      {isReceiving && currentStatus === "In Transit" && (
+      {isReceiving && currentStatus === "In Progress" && (
         <div className="mx-auto mb-5 flex max-w-[905px] items-start gap-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-800">
           <Truck size={19} className="mt-0.5 shrink-0" />
           <div>
@@ -497,7 +543,7 @@ const GoodsConfirmation = () => {
           />
         )}
 
-        {isReceiving && currentStatus === "Awaiting Confirmation" && (
+        {isReceiving && ["In Progress", "Completed"].includes(currentStatus) && (
           <GoodsReceivedTable
             items={receivedItems}
             onQuantityChange={updateReceivedQuantity}
@@ -506,7 +552,7 @@ const GoodsConfirmation = () => {
         )}
 
         {/* Sending store sees the quantities it handed over, not a receipt form. */}
-        {!isReceiving && currentStatus === "Awaiting Receipt" && (
+        {!isReceiving && ["In Progress", "Completed"].includes(currentStatus) && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[500px] border-collapse text-left text-sm">
               <thead>
@@ -544,7 +590,7 @@ const GoodsConfirmation = () => {
             <div className="mb-6 flex items-center gap-3">
               <Package size={21} className="text-[#078A68]" />
               <h3 className="text-base font-semibold text-gray-900">
-                {currentStatus === "Awaiting Dispatch"
+                {currentStatus === "Approved"
                   ? "Goods Awaiting Dispatch"
                   : "Goods In Transit"}
               </h3>
@@ -558,12 +604,12 @@ const GoodsConfirmation = () => {
                     <th className="w-[30%] px-4 text-left font-medium">Item</th>
                     <th
                       className={`px-4 text-center font-medium ${
-                        currentStatus === "In Transit" ? "w-[30%]" : "w-[60%]"
+                        currentStatus === "In Progress" ? "w-[30%]" : "w-[60%]"
                       }`}
                     >
                       Requested Quantity
                     </th>
-                    {currentStatus === "In Transit" && (
+                    {currentStatus === "In Progress" && (
                       <th className="w-[30%] px-4 text-center font-medium">
                         Dispatched Quantity
                       </th>
@@ -581,7 +627,7 @@ const GoodsConfirmation = () => {
                       </td>
                       <td className="px-4 font-medium">{item.name}</td>
                       <td className="px-4 text-center">{item.requested}</td>
-                      {currentStatus === "In Transit" && (
+                      {currentStatus === "In Progress" && (
                         <td className="px-4 text-center font-semibold">
                           {item.dispatched}
                         </td>
@@ -614,7 +660,7 @@ const GoodsConfirmation = () => {
           </div>
         )}
 
-        {isReceiving && currentStatus === "Awaiting Confirmation" && (
+        {isReceiving && ["In Progress", "Completed"].includes(currentStatus) && (
           <div className="mt-9">
             <label
               htmlFor="goods-note"
@@ -656,7 +702,7 @@ const GoodsConfirmation = () => {
           )}
 
         {isReceiving &&
-          currentStatus === "Awaiting Confirmation" &&
+          ["In Progress", "Completed"].includes(currentStatus) &&
           receivedItems.some(
             (item) => Number(item.received) !== item.handedOver
           ) && (
@@ -686,7 +732,7 @@ const GoodsConfirmation = () => {
           Back
         </button>
         {/* Receiving arrival confirmation */}
-        {isReceiving && currentStatus === "In Transit" && (
+        {isReceiving && currentStatus === "In Progress" && (
           <button
             type="button"
             onClick={handleGoodsArrival}
@@ -700,8 +746,7 @@ const GoodsConfirmation = () => {
         {/* Sending store can prepare and hand over only. */}
         {!isReceiving &&
           !isCompleted &&
-          (currentStatus === "Awaiting Preparation" ||
-            currentStatus === "Awaiting Handover") && (
+          currentStatus === "Approved" && (
             <button
               type="button"
               onClick={currentDetails.action}
@@ -714,7 +759,7 @@ const GoodsConfirmation = () => {
           )}
 
         {/* Only receiving store can confirm quantities and complete. */}
-        {isReceiving && currentStatus === "Awaiting Confirmation" && (
+        {isReceiving && currentStatus === "In Progress" && (
           <button
             type="button"
             onClick={handleReceipt}
