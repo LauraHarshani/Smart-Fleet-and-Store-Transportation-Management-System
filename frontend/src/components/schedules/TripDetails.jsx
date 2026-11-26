@@ -7,8 +7,9 @@ import {
   Route,
   X,
   CheckCircle2,
-  ChevronDown,
+  Timer,
 } from "lucide-react";
+import { useState } from "react";
 
 const statusStyles = {
   Assigned: "bg-amber-100 text-amber-800",
@@ -18,18 +19,26 @@ const statusStyles = {
   Completed: "bg-green-100 text-green-800",
 };
 
+const getTripDuration = (start, end) => {
+  const toMinutes = (value) => {
+    const [hours, minutes] = String(value || '').split(':').map(Number);
+    return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+  };
+  const startMinutes = toMinutes(start);
+  const endMinutes = toMinutes(end);
+  return startMinutes === null || endMinutes === null ? '—' : `${Math.max(0, (endMinutes - startMinutes) / 60).toFixed(1)} hr`;
+};
+
 const TripDetails = ({
   trip,
   selectedDate,
   onClose,
-  onUpdateStatus,
-  statusOptions,
+  onReportDelay,
+  delayBusy,
 }) => {
+  const [showDelayForm, setShowDelayForm] = useState(false);
+  const [delayMinutes, setDelayMinutes] = useState(15);
   if (!trip) return null;
-
-  const currentStatusIndex = trip.events.findIndex(
-    (event) => event.label === trip.status
-  );
 
   return (
     <div className="mt-3 rounded-2xl border border-[#E2E8E0] bg-white p-5 shadow-sm">
@@ -100,14 +109,7 @@ const TripDetails = ({
           <InfoItem
             icon={Route}
             label="Duration"
-            value={`${Math.max(
-              0,
-              (Number(trip.end.split(":")[0]) * 60 +
-                Number(trip.end.split(":")[1]) -
-                Number(trip.start.split(":")[0]) * 60 -
-                Number(trip.start.split(":")[1])) /
-                60
-            ).toFixed(1)} hr`}
+            value={getTripDuration(trip.start, trip.end)}
           />
         </div>
 
@@ -132,7 +134,7 @@ const TripDetails = ({
 
             <div>
               <p className="text-sm font-medium text-gray-800">
-                {trip.route.split(" → ")[1]} Store
+                {trip.route.split(" → ")[1] || trip.route.split(" → ")[0] || '—'} Store
               </p>
               <p className="mt-1 text-xs text-[#078B66]">
                 {trip.bookings[1] || "Destination"}
@@ -213,7 +215,7 @@ const TripDetails = ({
         </div>
       </div>
 
-      {/* Status update */}
+      {/* Status and delay action */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[#E8EDE9] pt-4">
         <div>
           <p className="text-xs font-medium text-gray-600">
@@ -224,27 +226,15 @@ const TripDetails = ({
           </p>
         </div>
 
-        <div className="relative">
-          <select
-            value={trip.status}
-            onChange={(event) =>
-              onUpdateStatus(trip.id, event.target.value)
-            }
-            className="h-10 appearance-none rounded-xl border border-[#27866A] bg-[#E8F5EC] py-2 pl-4 pr-10 text-sm font-semibold text-[#205648] outline-none transition hover:bg-[#DCEBDD] focus:ring-2 focus:ring-[#B5D6A7]"
-          >
-            {statusOptions.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-
-          <ChevronDown
-            size={17}
-            className="pointer-events-none absolute right-3 top-3 text-[#205648]"
-          />
-        </div>
+        {!['Draft', 'Pending', 'Completed', 'Cancelled'].includes(trip.status) && <button type="button" onClick={() => setShowDelayForm((visible) => !visible)} className="flex h-10 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 hover:bg-amber-100"><Timer size={16} />Report delay</button>}
       </div>
+
+      {showDelayForm && <form onSubmit={(event) => { event.preventDefault(); onReportDelay(trip._id, Number(delayMinutes)); }} className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+        <label className="text-xs font-semibold text-gray-700">Delay duration (minutes)<input required type="number" min="1" step="1" value={delayMinutes} onChange={(event) => setDelayMinutes(event.target.value)} className="mt-1 block h-10 w-44 rounded-lg border border-gray-300 bg-white px-3 text-sm" /></label>
+        <button type="submit" disabled={delayBusy || !trip._id} className="h-10 rounded-lg bg-amber-700 px-4 text-sm font-bold text-white hover:bg-amber-800 disabled:opacity-50">{delayBusy ? 'Revalidating…' : 'Apply delay and reschedule'}</button>
+        <button type="button" onClick={() => setShowDelayForm(false)} className="h-10 rounded-lg px-3 text-sm font-semibold text-gray-600 hover:bg-white">Cancel</button>
+        <p className="basis-full text-xs text-amber-900">Active store reservations will shift by this amount and be checked against store hours and dock capacity.</p>
+      </form>}
     </div>
   );
 };
