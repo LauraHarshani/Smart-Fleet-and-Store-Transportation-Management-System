@@ -17,6 +17,12 @@ const createError = (message, statusCode = 400) => {
   return error;
 };
 
+const assertStoreScope = (slot, storeScope) => {
+  if (storeScope && slot.store.toString() !== storeScope.toString()) {
+    throw createError("Slot reservation not found.", 404);
+  }
+};
+
 // Validate reservation time
 const validateSlotTime = (startAt, endAt) => {
   const start = new Date(startAt);
@@ -133,7 +139,7 @@ const getSlots = async (filters = {}) => {
 };
 
 // GET A SINGLE SLOT
-const getSlotById = async (slotId) => {
+const getSlotById = async (slotId, storeScope = null) => {
   if (!mongoose.Types.ObjectId.isValid(slotId)) {
     throw createError("Invalid slot ID.");
   }
@@ -145,12 +151,13 @@ const getSlotById = async (slotId) => {
   if (!slot) {
     throw createError("Slot reservation not found.", 404);
   }
+  assertStoreScope(slot, storeScope);
 
   return slot;
 };
 
 // UPDATE SLOT RESERVATION
-const updateSlot = async (slotId, updateData) => {
+const updateSlot = async (slotId, updateData, storeScope = null) => {
   if (!mongoose.Types.ObjectId.isValid(slotId)) {
     throw createError("Invalid slot ID.");
   }
@@ -161,6 +168,7 @@ const updateSlot = async (slotId, updateData) => {
     await session.withTransaction(async () => {
       const slot = await StoreSlot.findById(slotId).session(session);
       if (!slot) throw createError("Slot reservation not found.", 404);
+      assertStoreScope(slot, storeScope);
       if (["Cancelled", "Completed"].includes(slot.status)) {
         throw createError("Cancelled or completed reservations cannot be updated.");
       }
@@ -189,7 +197,7 @@ const updateSlot = async (slotId, updateData) => {
 };
 
 // CANCEL SLOT RESERVATION
-const cancelSlot = async (slotId) => {
+const cancelSlot = async (slotId, storeScope = null) => {
   if (!mongoose.Types.ObjectId.isValid(slotId)) {
     throw createError("Invalid slot ID.");
   }
@@ -199,6 +207,7 @@ const cancelSlot = async (slotId) => {
   if (!slot) {
     throw createError("Slot reservation not found.", 404);
   }
+  assertStoreScope(slot, storeScope);
 
   if (slot.status === "Completed") {
     throw createError("Completed reservations cannot be cancelled.");
