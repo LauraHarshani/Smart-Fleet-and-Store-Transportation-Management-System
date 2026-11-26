@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
 const ctrl = require('../controllers/StoreBookingController');
+
+router.use(protect);
 
 // Create, list, single view, history, update & cancel
 router.post('/', ctrl.createStoreBooking);
