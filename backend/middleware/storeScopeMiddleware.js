@@ -47,6 +47,7 @@ const storeScope = (req, res, next) => {
         const requestedStore =
             req.params.storeId ||
             req.query.storeId ||
+            req.query.store ||
             req.body?.storeId ||
             req.body?.store;
 
