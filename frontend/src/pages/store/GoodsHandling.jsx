@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -16,25 +16,26 @@ import {
 
 const sendingStatuses = [
   "Awaiting Preparation",
+  "Prepared",
+  "In Transit",
   "Awaiting Handover",
-  "Awaiting Receipt",
-  "Completed",
+  "Handed Over",
 ];
 
 const receivingStatuses = [
-  "Awaiting Dispatch",
-  "In Transit",
-  "Awaiting Confirmation",
+  "Awaiting Receipt",
+  "Received",
   "Completed",
 ];
 
 const statusStyles = {
   "Awaiting Preparation": "bg-[#FFF4D6] text-[#925C00]",
+  Prepared: "bg-[#DCFCE7] text-[#15803D]",
   "Awaiting Handover": "bg-[#FFE8D5] text-[#A4490B]",
-  "Awaiting Receipt": "bg-[#DBEAFE] text-[#1D4ED8]",
-  "Awaiting Dispatch": "bg-[#F3E8FF] text-[#7E22CE]",
   "In Transit": "bg-[#CFFAFE] text-[#0E7490]",
-  "Awaiting Confirmation": "bg-[#FCE7F3] text-[#BE185D]",
+  "Handed Over": "bg-[#DBEAFE] text-[#1D4ED8]",
+  "Awaiting Receipt": "bg-[#FCE7F3] text-[#BE185D]",
+  Received: "bg-[#DCFCE7] text-[#15803D]",
   Completed: "bg-[#DCFCE7] text-[#15803D]",
 };
 
@@ -47,12 +48,13 @@ const tabs = [
 
 const GoodsHandling = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState(location.state?.activeTab || "all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All Statuses");
   const [selectedRoute, setSelectedRoute] = useState("All Routes");
@@ -64,7 +66,6 @@ const GoodsHandling = () => {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     api.get("/store-bookings")
       .then(({ data }) => {
         if (!active) return;
@@ -73,14 +74,24 @@ const GoodsHandling = () => {
           const origin = record.pickupStore?.name || "Pickup store";
           const destination = record.destinationStore?.name || "Destination store";
           const direction = String(record.pickupStore?._id || record.pickupStore) === storeId ? "sending" : "receiving";
-          const workflowStatus = record.status === "Completed" ? "Completed"
-            : record.status === "In Progress" ? (direction === "sending" ? "Awaiting Receipt" : "In Transit")
-              : record.status === "Approved" ? (direction === "sending" ? "Awaiting Handover" : "Awaiting Dispatch")
-                : record.status === "Rejected" || record.status === "Cancelled" ? record.status : "Awaiting Preparation";
+          const dropStop = record.stops?.find((stop) => stop.stopType === "DROP");
+          const hasHandover = record.items?.some((line) => line.handedOverQuantity !== null && line.handedOverQuantity !== undefined);
+          const hasReceived = record.items?.length > 0 && record.items.every((line) => line.receivedQuantity !== null && line.receivedQuantity !== undefined);
+          const workflowStatus = record.status === "Completed"
+            ? (direction === "sending" ? "Handed Over" : "Completed")
+            : record.status === "In Progress"
+              ? (direction === "sending"
+                ? (dropStop?.status === "Completed" ? "Handed Over" : dropStop?.status === "Arrived" ? "Awaiting Handover" : hasHandover ? "In Transit" : "Prepared")
+                : (hasReceived ? "Received" : "Awaiting Receipt"))
+              : record.status === "Approved"
+                ? (direction === "sending" ? "Awaiting Preparation" : "Awaiting Receipt")
+                : record.status === "Rejected" || record.status === "Cancelled" ? record.status
+                  : direction === "sending" ? "Awaiting Preparation" : "Awaiting Receipt";
           const date = record.requestedPickupDate ? new Date(record.requestedPickupDate) : null;
           return {
             ...record,
             id: record._id,
+            backendStatus: record.status,
             displayId: record.bookingCode || record._id,
             origin, destination,
             route: `${origin.replace(/ Store$/i, "")} → ${destination.replace(/ Store$/i, "")}`,
@@ -108,17 +119,17 @@ const GoodsHandling = () => {
   }, [user?.storeId, user?.store]);
 
   const sendingCount = bookings.filter(
-    (booking) =>
-      booking.direction === "sending" && booking.status !== "Completed"
+      (booking) =>
+      booking.direction === "sending" && booking.backendStatus !== "Completed"
   ).length;
 
   const receivingCount = bookings.filter(
     (booking) =>
-      booking.direction === "receiving" && booking.status !== "Completed"
+      booking.direction === "receiving" && booking.backendStatus !== "Completed"
   ).length;
 
   const completedCount = bookings.filter(
-    (booking) => booking.status === "Completed"
+    (booking) => booking.backendStatus === "Completed"
   ).length;
 
   const routes = useMemo(
@@ -132,11 +143,11 @@ const GoodsHandling = () => {
         activeTab === "all" ||
         (activeTab === "sending" &&
           booking.direction === "sending" &&
-          booking.status !== "Completed") ||
+          booking.backendStatus !== "Completed") ||
         (activeTab === "receiving" &&
           booking.direction === "receiving" &&
-          booking.status !== "Completed") ||
-        (activeTab === "completed" && booking.status === "Completed");
+          booking.backendStatus !== "Completed") ||
+        (activeTab === "completed" && booking.backendStatus === "Completed");
 
       const matchesSearch = booking.displayId
         .toLowerCase()
@@ -175,11 +186,6 @@ const GoodsHandling = () => {
     selectedRoute,
     selectedDate,
   ]);
-
-  // Return to the first page whenever the filters or selected tab change.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchTerm, selectedStatus, selectedRoute, selectedDate]);
 
   // Pagination calculations are based on the filtered results.
   const totalPages = Math.ceil(filteredBookings.length / bookingsPerPage);
@@ -230,6 +236,7 @@ const GoodsHandling = () => {
               onClick={() => {
                 setActiveTab(tab.id);
                 setSelectedStatus("All Statuses");
+                setCurrentPage(1);
               }}
               className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-all ${
                 isActive
@@ -259,7 +266,7 @@ const GoodsHandling = () => {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               placeholder="Search by booking ID..."
               className="h-10 w-full rounded-lg border border-[#078A68] bg-white pl-11 pr-3 text-sm text-gray-800 outline-none transition placeholder:text-gray-500 focus:ring-2 focus:ring-[#078A68]/15"
             />
@@ -268,7 +275,7 @@ const GoodsHandling = () => {
           <div className="relative w-full sm:w-[190px]">
             <select
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => { setSelectedStatus(e.target.value); setCurrentPage(1); }}
               className="h-10 w-full appearance-none rounded-lg border border-[#078A68] bg-white px-3 pr-8 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#078A68]/15"
             >
               <option value="All Statuses">All Statuses</option>
@@ -287,7 +294,7 @@ const GoodsHandling = () => {
           <div className="relative w-full sm:w-[165px]">
             <select
               value={selectedRoute}
-              onChange={(e) => setSelectedRoute(e.target.value)}
+              onChange={(e) => { setSelectedRoute(e.target.value); setCurrentPage(1); }}
               className="h-10 w-full appearance-none rounded-lg border border-[#078A68] bg-white px-3 pr-8 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#078A68]/15"
             >
               <option value="All Routes">All Routes</option>
@@ -311,7 +318,7 @@ const GoodsHandling = () => {
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => { setSelectedDate(e.target.value); setCurrentPage(1); }}
               className="h-10 w-full rounded-lg border border-[#078A68] bg-white pl-10 pr-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#078A68]/15"
               aria-label="Filter by scheduled pickup date"
             />
@@ -328,6 +335,7 @@ const GoodsHandling = () => {
                 setSelectedStatus("All Statuses");
                 setSelectedRoute("All Routes");
                 setSelectedDate("");
+                setCurrentPage(1);
               }}
               className="h-10 rounded-lg px-3 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
             >

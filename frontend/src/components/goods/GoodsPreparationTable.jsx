@@ -1,6 +1,6 @@
 import { Package } from "lucide-react";
 
-const GoodsPreparationTable = ({ items }) => {
+const GoodsPreparationTable = ({ items, onInventoryChange }) => {
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
@@ -30,7 +30,8 @@ const GoodsPreparationTable = ({ items }) => {
 
           <tbody>
             {items.map((item, index) => {
-              const isReady = item.inventory >= item.requested;
+              const hasInventory = item.inventory !== "" && Number.isFinite(Number(item.inventory));
+              const isReady = hasInventory && Number(item.inventory) >= item.requested;
 
               return (
                 <tr
@@ -46,7 +47,14 @@ const GoodsPreparationTable = ({ items }) => {
                   </td>
 
                   <td className="px-4 text-center">
-                    {item.inventory}
+                    <input
+                      type="number"
+                      min="0"
+                      value={item.inventory}
+                      onChange={(event) => onInventoryChange(index, event.target.value)}
+                      aria-label={`Available inventory for ${item.name}`}
+                      className="h-8 w-24 rounded-md border border-gray-300 bg-white px-2 text-center outline-none focus:border-[#078A68] focus:ring-2 focus:ring-[#078A68]/15"
+                    />
                   </td>
 
                   <td className="px-4 text-center">
@@ -61,7 +69,7 @@ const GoodsPreparationTable = ({ items }) => {
                           : "bg-red-100 text-red-700"
                       }`}
                     >
-                      {isReady ? "Ready" : "Not Ready"}
+                      {!hasInventory ? "Enter stock" : isReady ? "Ready" : "Not Ready"}
                     </span>
                   </td>
                 </tr>

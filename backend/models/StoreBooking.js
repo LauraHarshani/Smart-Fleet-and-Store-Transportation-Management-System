@@ -39,6 +39,11 @@ const bookingLineSchema = new mongoose.Schema(
       min: 0,
       default: null,
     },
+    inventoryVerifiedQuantity: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
   },
   { _id: true }
 );
