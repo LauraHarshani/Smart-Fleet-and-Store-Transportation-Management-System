@@ -9,6 +9,7 @@ const storeRefId = (store) => {
   const id = store && typeof store === 'object' && store._id ? store._id : store;
   return id ? id.toString() : '';
 };
+const STORE_ROLES = new Set(['store manager', 'store employee']);
 
 const ALLOWED_TRANSITIONS = {
   Draft: ['Submitted', 'Cancelled'],
@@ -60,7 +61,9 @@ const checkUserRoleAndStoreScope = (req, booking, { allowedRoles = null, checkBo
 
   if (Array.isArray(allowedRoles) && allowedRoles.length > 0 && !isAdmin) {
     const normalizedAllowed = allowedRoles.map((r) => r.toLowerCase());
-    if (!normalizedAllowed.includes(rawRole)) {
+    const isStoreRoleAllowed = STORE_ROLES.has(rawRole) &&
+      normalizedAllowed.some((role) => STORE_ROLES.has(role));
+    if (!normalizedAllowed.includes(rawRole) && !isStoreRoleAllowed) {
       return `Role "${req.user.role || 'unknown'}" is not permitted for this action`;
     }
   }
