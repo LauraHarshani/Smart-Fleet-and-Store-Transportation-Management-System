@@ -12,6 +12,7 @@ const tripStopSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  store: { type: mongoose.Schema.Types.ObjectId, ref: "Store", default: null },
   time: {
     type: String,
     trim: true,
@@ -88,6 +89,10 @@ const tripSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    vehicleRef: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", default: null },
+    storeBookings: [{ type: mongoose.Schema.Types.ObjectId, ref: "StoreBooking" }],
+    scheduledStartAt: { type: Date, default: null },
+    scheduledEndAt: { type: Date, default: null },
     driver: {
       type: String,
       trim: true,
@@ -145,5 +150,7 @@ const tripSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+tripSchema.index({ vehicleRef: 1, scheduledStartAt: 1, scheduledEndAt: 1, status: 1 });
 
 module.exports = mongoose.model("trips", tripSchema);

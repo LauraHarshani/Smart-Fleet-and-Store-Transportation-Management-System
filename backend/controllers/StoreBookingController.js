@@ -3,6 +3,8 @@ const { StoreBooking } = require('../models/StoreBooking');
 const { cancelStoreBooking: cancelStoreBookingAndRevalidate } = require('../services/storeBookingCancellationService');
 const Store = require('../models/store');
 const Item = require('../models/item');
+const Trip = require('../models/trip');
+const Vehicle = require('../models/vehicle');
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const storeRefId = (store) => {
@@ -240,6 +242,8 @@ exports.getStoreBookings = async (req, res) => {
 
     const bookings = await StoreBooking.find(filter)
       .populate('pickupStore destinationStore items.item stops.store')
+      .populate('assignedTrip', 'id route status vehicle driver')
+      .populate('assignedVehicle', 'id registrationNumber model type assignedDriverName')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ count: bookings.length, bookings });
@@ -253,9 +257,10 @@ exports.getStoreBookingById = async (req, res) => {
     if (!isValidId(req.params.id)) {
       return res.status(400).json({ message: 'Invalid booking ID' });
     }
-    const booking = await StoreBooking.findById(req.params.id).populate(
-      'pickupStore destinationStore items.item stops.store'
-    );
+    const booking = await StoreBooking.findById(req.params.id)
+      .populate('pickupStore destinationStore items.item stops.store')
+      .populate('assignedTrip', 'id route status vehicle driver')
+      .populate('assignedVehicle', 'id registrationNumber model type assignedDriverName');
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
@@ -538,6 +543,31 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
       body.reviewedBy || body.updatedBy || req.user?.userId || req.user?._id || req.user?.id || booking.requestedBy;
     const prevStatus = booking.status;
 
+    let allocatedTrip = null;
+    let allocatedVehicle = null;
+    if (targetStatus === 'In Progress' || targetStatus === 'Completed') {
+      if (!booking.assignedTrip || !booking.assignedVehicle) {
+        return res.status(400).json({ message: 'Allocate a trip and fleet vehicle before starting this booking' });
+      }
+      [allocatedTrip, allocatedVehicle] = await Promise.all([
+        Trip.findById(booking.assignedTrip),
+        Vehicle.findById(booking.assignedVehicle),
+      ]);
+      if (!allocatedTrip || !allocatedVehicle) {
+        return res.status(409).json({ message: 'The allocated trip or vehicle no longer exists' });
+      }
+      if (targetStatus === 'In Progress') {
+        if (allocatedVehicle.status !== 'Available') {
+          return res.status(409).json({ message: 'The allocated vehicle is no longer available' });
+        }
+        allocatedVehicle.status = 'In Transit';
+        allocatedTrip.status = 'In Progress';
+      } else {
+        allocatedVehicle.status = 'Available';
+        allocatedTrip.status = 'Completed';
+      }
+    }
+
     if (targetStatus === 'Cancelled') {
       const result = await cancelStoreBookingAndRevalidate({
         bookingId: booking._id,
@@ -566,7 +596,20 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
       reason,
     });
 
-    await booking.save();
+    if (allocatedTrip && allocatedVehicle) {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await booking.save({ session });
+          await allocatedTrip.save({ session });
+          await allocatedVehicle.save({ session });
+        });
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      await booking.save();
+    }
     return res.status(200).json({
       message: `Booking status changed to ${targetStatus}`,
       booking,
@@ -585,8 +628,8 @@ exports.rejectBooking = (req, res) =>
 exports.requestBookingChanges = (req, res) =>
   transitionStatus(req, res, 'Changes Requested', 'CHANGES_REQUESTED', ['store manager', 'admin']);
 exports.startBooking = (req, res) =>
-  transitionStatus(req, res, 'In Progress', 'IN_PROGRESS', ['store manager', 'admin']);
+  transitionStatus(req, res, 'In Progress', 'IN_PROGRESS', ['store employee', 'store manager', 'admin']);
 exports.completeBooking = (req, res) =>
-  transitionStatus(req, res, 'Completed', 'COMPLETED', ['store manager', 'admin']);
+  transitionStatus(req, res, 'Completed', 'COMPLETED', ['store employee', 'store manager', 'admin']);
 exports.cancelStoreBooking = (req, res) =>
   transitionStatus(req, res, 'Cancelled', 'CANCELLED', ['store employee', 'store manager', 'admin']);

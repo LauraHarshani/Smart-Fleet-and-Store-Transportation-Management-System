@@ -43,7 +43,7 @@ const validateSlotTime = (startAt, endAt) => {
 };
 
 // CREATE SLOT RESERVATION
-const createSlot = async (slotData) => {
+const createSlotInSession = async (slotData, session) => {
   const {
     store,
     trip,
@@ -78,35 +78,43 @@ const createSlot = async (slotData) => {
 
   const { start, end } = validateSlotTime(startAt, endAt);
 
-  const session = await mongoose.startSession();
+  const existingStore = await Store.findById(store).session(session);
+  if (!existingStore) throw createError("Store not found.", 404);
+
+  const existingTrip = await Trip.findById(trip).session(session);
+  if (!existingTrip) throw createError("Trip not found.", 404);
+  if (!existingTrip.stops.id(stopId)) {
+    throw createError("The selected stop does not belong to this trip.");
+  }
+
+  await lockStoreReservations(store, session);
+  await checkSlotAvailability({ storeId: store, startAt: start, endAt: end, session });
+
+  const [newSlot] = await StoreSlot.create([{
+    store,
+    trip,
+    stopId,
+    vehicle: vehicle.trim(),
+    operationType,
+    startAt: start,
+    endAt: end,
+    notes: notes || "",
+  }], { session });
+  return newSlot;
+};
+
+// CREATE SLOT RESERVATION
+const createSlot = async (slotData, session = null) => {
+  if (session) return createSlotInSession(slotData, session);
+
+  const ownSession = await mongoose.startSession();
   let newSlot;
   try {
-    await session.withTransaction(async () => {
-      const existingStore = await Store.findById(store).session(session);
-      if (!existingStore) throw createError("Store not found.", 404);
-
-      const existingTrip = await Trip.findById(trip).session(session);
-      if (!existingTrip) throw createError("Trip not found.", 404);
-      if (!existingTrip.stops.id(stopId)) {
-        throw createError("The selected stop does not belong to this trip.");
-      }
-
-      await lockStoreReservations(store, session);
-      await checkSlotAvailability({ storeId: store, startAt: start, endAt: end, session });
-
-      [newSlot] = await StoreSlot.create([{
-        store,
-        trip,
-        stopId,
-        vehicle: vehicle.trim(),
-        operationType,
-        startAt: start,
-        endAt: end,
-        notes: notes || "",
-      }], { session });
+    await ownSession.withTransaction(async () => {
+      newSlot = await createSlotInSession(slotData, ownSession);
     });
   } finally {
-    await session.endSession();
+    await ownSession.endSession();
   }
   return newSlot;
 };

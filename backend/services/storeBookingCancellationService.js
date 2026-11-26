@@ -27,6 +27,7 @@ const buildTripStops = (trip, bookings) => {
       ...(previous?._id ? { _id: previous._id } : {}),
       type: index === 0 ? 'ORIGIN' : 'DROP',
       location: stop.location,
+      store: stop.storeId,
       time: previous?.time || '',
       window: previous?.window || '',
       items: previous?.items || [],

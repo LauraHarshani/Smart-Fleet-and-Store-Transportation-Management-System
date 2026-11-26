@@ -823,8 +823,8 @@ const StoreBookings = () => {
       cargo: lineSummaries.join(' & '),
       consignments: Array.isArray(b.items) ? b.items.length : 0,
       distance: b.distanceKm ? `${b.distanceKm} km` : '',
-      driver: b.assignedTrip?.driver?.name || '',
-      vehicle: b.assignedVehicle?.vehicleId || b.assignedVehicle?.plateNumber || '',
+      driver: b.assignedTrip?.driver?.name || b.assignedTrip?.driver || b.assignedVehicle?.assignedDriverName || '',
+      vehicle: b.assignedVehicle?.registrationNumber || b.assignedVehicle?.vehicleId || b.assignedVehicle?.plateNumber || '',
       totalWeight: `${computedWeight.toLocaleString()} kg`,
       history: formattedHistory,
       rawBooking: b,
@@ -1320,12 +1320,12 @@ const StoreBookings = () => {
                                 </div>
                                 <div>
                                   <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.driver}</p>
-                                  <p className="text-[10px] text-gray-500">{selectedRaw.assignedTrip?.driver?.phone || ''}</p>
+                                  <p className="text-[10px] text-gray-500">{selectedRaw.assignedVehicle?.assignedDriver?.name || selectedRaw.assignedVehicle?.assignedDriverName || selectedRaw.assignedTrip?.driver || ''}</p>
                                 </div>
                              </div>
                              <div className="text-right">
                                 <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.vehicle}</p>
-                                <p className="text-[10px] text-gray-500">{selectedRaw.assignedVehicle?.vehicleType || ''}</p>
+                                <p className="text-[10px] text-gray-500">{selectedRaw.assignedVehicle?.type || selectedRaw.assignedVehicle?.vehicleType || ''}</p>
                              </div>
                           </div>
                         )}
