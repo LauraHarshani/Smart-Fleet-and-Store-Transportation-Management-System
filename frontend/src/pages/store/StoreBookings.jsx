@@ -1,95 +1,289 @@
-import { useCallback, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, Download, Plus, Calendar, ChevronRight, Truck, 
-  CheckCircle2, History, Edit2,
+  CheckCircle2, History, Edit2, ArrowLeft,
   MapPin, Clock, Package, Trash2, ShieldAlert, Save, Send 
 } from 'lucide-react';
-import api from '../../services/api';
 
-const mapStoreBooking = (booking) => {
-  const lines = (booking.items || []).map((line) => ({
-    name: line.item?.name || 'Item',
-    quantity: `${line.quantity} ${line.unit || 'units'}`,
-    weight: line.item?.weightKg ? `${(line.quantity * line.item.weightKg).toLocaleString()} kg` : '—',
-    description: line.item?.description || '',
-  }));
-  const totalWeightKg = (booking.items || []).reduce((sum, line) => sum + (Number(line.item?.weightKg) || 0) * Number(line.quantity || 0), 0);
-  const totalItems = (booking.items || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
-  const date = booking.requestedPickupDate ? new Date(booking.requestedPickupDate) : null;
-  const statusLabels = { Submitted: 'Pending Approval', Approved: 'Confirmed', 'In Progress': 'In Transit' };
+const API_ROOT = 'http://localhost:5000/api';
+const BOOKINGS_API = `${API_ROOT}/store-bookings`;
+const apiFetch = (url, options = {}) => fetch(url, { ...options, credentials: 'include' });
 
+const isObjectId = (val) => typeof val === 'string' && /^[a-f\d]{24}$/i.test(val.trim());
+
+const decodeJwtPayload = (token) => {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const jsonStr = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonStr);
+  } catch (_) {
+    return null;
+  }
+};
+
+const extractUserIdFromAny = (obj) => {
+  if (!obj || typeof obj !== 'object') return '';
+  const candidates = [
+    obj._id,
+    obj.id,
+    obj.userId,
+    obj.sub,
+    obj.user?._id,
+    obj.user?.id,
+    obj.data?._id,
+    obj.data?.id,
+    obj.data?.user?._id,
+    obj.data?.user?.id,
+  ];
+  for (const c of candidates) {
+    if (isObjectId(c)) return c.trim();
+  }
+  return '';
+};
+
+const getAuthToken = () => {
+  const directKeys = ['token', 'authToken', 'accessToken', 'jwt', 'userToken'];
+  for (const k of directKeys) {
+    const val = localStorage.getItem(k);
+    if (val) return val.replace(/^Bearer\s+/i, '').trim();
+  }
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    const val = localStorage.getItem(key);
+    if (!val) continue;
+    if (val.startsWith('eyJ')) return val.trim();
+    try {
+      const parsed = JSON.parse(val);
+      const t = parsed?.token || parsed?.accessToken || parsed?.data?.token;
+      if (typeof t === 'string' && t.length > 10) return t.replace(/^Bearer\s+/i, '').trim();
+    } catch (_) {}
+  }
+  return '';
+};
+
+const getAuthHeaders = () => {
+  const token = getAuthToken();
   return {
-    ...booking,
-    id: booking.bookingCode || booking._id,
-    status: statusLabels[booking.status] || booking.status,
-    type: 'Store Transfer',
-    rawDate: date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : '',
-    date: date && !Number.isNaN(date.getTime()) ? `${date.toLocaleDateString()} - ${booking.requestedTimeWindow?.startTime || ''}` : '—',
-    from: booking.pickupStore?.name || '—',
-    to: booking.destinationStore?.name || '—',
-    distance: '—',
-    driver: booking.assignedTrip?.driver || 'Not assigned',
-    vehicle: booking.assignedVehicle?.registrationNumber || 'Not assigned',
-    cargo: lines.map((line) => line.name).join(', '),
-    consignments: lines.length,
-    totalItems,
-    totalWeight: totalWeightKg ? `${totalWeightKg.toLocaleString()} kg` : '—',
-    items: lines,
-    history: (booking.changeHistory || []).map((entry) => ({
-      time: entry.changedAt ? new Date(entry.changedAt).toLocaleString() : '',
-      action: entry.action,
-      by: entry.changedBy?.name || 'System',
-    })),
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+};
+
+const resolveCurrentUserId = (usersList = []) => {
+  const idKeys = ['userId', 'currentUserId', '_id', 'id'];
+  for (const k of idKeys) {
+    const val = localStorage.getItem(k);
+    if (isObjectId(val)) return val.trim();
+  }
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      const foundId = extractUserIdFromAny(parsed);
+      if (foundId) return foundId;
+    } catch (_) {}
+  }
+
+  const token = getAuthToken();
+  const payload = decodeJwtPayload(token);
+  const jwtUserId = extractUserIdFromAny(payload);
+  if (jwtUserId) return jwtUserId;
+
+  const listMatch = usersList.find((u) => isObjectId(u?._id || u?.id));
+  if (listMatch) return (listMatch._id || listMatch.id).trim();
+
+  return '';
+};
+
+const parseTimeSlot = (slotLabel) => {
+  if (slotLabel && slotLabel.includes('Afternoon')) {
+    return { startTime: '13:00', endTime: '16:00' };
+  }
+  return { startTime: '09:00', endTime: '12:00' };
+};
+
+const formatDisplayDate = (isoDate, timeWindow) => {
+  if (!isoDate) return '';
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return String(isoDate);
+  const datePart = d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  });
+  const start = timeWindow?.startTime || '';
+  return start ? `${datePart} - ${start} IST` : datePart;
+};
+
+const mapBackendStatusToUi = (backendStatus) => {
+  switch (backendStatus) {
+    case 'In Progress':
+      return 'In Transit';
+    case 'Approved':
+      return 'Confirmed';
+    case 'Draft':
+    case 'Submitted':
+    case 'Changes Requested':
+      return 'Pending Approval';
+    case 'Completed':
+      return 'Completed';
+    case 'Cancelled':
+      return 'Cancelled';
+    case 'Rejected':
+      return 'Rejected';
+    default:
+      return backendStatus || '';
+  }
 };
 
 // ==========================================
 // 1. CREATE / EDIT BOOKING COMPONENT (FE-3)
 // ==========================================
-const getInitialBookingForm = (editData) => ({
-  pickupStore: editData?.from || 'Colombo Main Store (Peliyagoda Central Hub - LK-WP)',
-  destinationStore: editData?.to || '',
-  dispatchDate: editData?.rawDate || '',
-  timeSlot: editData ? 'Morning Prime: 09:00 AM - 12:00 PM IST' : '',
-  specialInstructions: editData?.cargo || '',
-  directives: editData ? ['+ Keep Dry'] : [],
-});
+const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], currentUserId, onSaved }) => {
+  const defaultPickupStore = storesList[0];
 
-const getInitialBookingItems = (editData) => {
-  if (!editData?.consignments) return [{ id: 1, itemType: '', quantity: '', unit: 'Cartons', weight: '', weightUnit: 'kg' }];
-  const count = Number(editData.consignments) || 1;
-  return Array.from({ length: count }, (_, index) => ({
-    id: Date.now() + index,
-    itemType: editData.items?.[index]?.name || 'Pure Ceylon Black Tea (BOPF) - 25kg Cartons (Export Grade)',
-    quantity: String(editData.items?.[index]?.quantity || '10'),
-    unit: 'Cartons',
-    weight: String(editData.items?.[index]?.weight || (parseInt(editData.totalWeight?.replace(/,/g, ''), 10) / count) || 1000).replace(/[^\d.]/g, ''),
-    weightUnit: 'kg',
-  }));
-};
+  const [formData, setFormData] = useState({
+    pickupStoreId: defaultPickupStore?._id || '',
+    pickupStore: defaultPickupStore?.name || '',
+    destinationStoreId: '',
+    destinationStore: '',
+    dispatchDate: '',
+    timeSlot: '',
+    specialInstructions: '',
+    directives: []
+  });
 
-const CreateBookingView = ({ onBack, editData }) => {
-  const [formData, setFormData] = useState(() => getInitialBookingForm(editData));
-  const [items, setItems] = useState(() => getInitialBookingItems(editData));
+  const [items, setItems] = useState([
+    { id: 1, itemId: '', itemType: '', quantity: '', unit: 'Cartons', weight: '', weightUnit: 'kg' }
+  ]);
 
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const itemTypes = [
-    'Pure Ceylon Black Tea (BOPF) - 25kg Cartons (Export Grade)',
-    'Organic Ceylon Cinnamon Quills - 20kg Bales (Alba Super)',
-    'General Ambient FMCG Provisions'
-  ];
+  useEffect(() => {
+    if (!editData && storesList.length > 0 && !formData.pickupStoreId) {
+      const first = storesList[0];
+      setFormData((prev) => ({
+        ...prev,
+        pickupStoreId: first._id,
+        pickupStore: first.name,
+      }));
+    }
+  }, [storesList, editData, formData.pickupStoreId]);
+
+  useEffect(() => {
+    if (editData) {
+      const raw = editData.rawBooking || {};
+      const matchedPickup =
+        storesList.find(
+          (s) =>
+            s._id === (raw.pickupStore?._id || raw.pickupStore) ||
+            s.name === (raw.pickupStore?.name || editData.from)
+        ) || defaultPickupStore;
+
+      const matchedDest = storesList.find(
+        (s) =>
+          s._id === (raw.destinationStore?._id || raw.destinationStore) ||
+          s.name === (raw.destinationStore?.name || editData.to)
+      );
+
+      const isoDate = raw.requestedPickupDate
+        ? new Date(raw.requestedPickupDate).toISOString().split('T')[0]
+        : editData.rawDate || '';
+      const startTime = raw.requestedTimeWindow?.startTime || '09:00';
+      const slotValue = startTime.startsWith('13')
+        ? 'Afternoon: 01:00 PM - 04:00 PM IST'
+        : 'Morning Prime: 09:00 AM - 12:00 PM IST';
+
+      setFormData({
+        pickupStoreId: matchedPickup?._id || '',
+        pickupStore: matchedPickup?.name || '',
+        destinationStoreId: matchedDest?._id || '',
+        destinationStore: matchedDest?._id || '',
+        dispatchDate: isoDate,
+        timeSlot: slotValue,
+        specialInstructions: raw.reviewNote || '',
+        directives: []
+      });
+
+      if (Array.isArray(raw.items) && raw.items.length > 0) {
+        setItems(
+          raw.items.map((line, idx) => {
+            const itemObj =
+              typeof line.item === 'object'
+                ? line.item
+                : itemsList.find((it) => it._id === line.item);
+            const unitWeight = Number(itemObj?.weightKg) || 1;
+            const qty = Number(line.quantity) || 1;
+            const matchedLabel = itemObj
+              ? `${itemObj.name}${itemObj.code ? ` (${itemObj.code})` : ''}`
+              : '';
+            return {
+              id: line._id || Date.now() + idx,
+              itemId: itemObj?._id || line.item || '',
+              itemType: matchedLabel,
+              quantity: String(qty),
+              unit: line.unit || itemObj?.unitOfMeasure || 'units',
+              weight: String(qty * unitWeight),
+              weightUnit: 'kg'
+            };
+          })
+        );
+      }
+    }
+  }, [editData, itemsList, storesList, defaultPickupStore]);
 
   const quickDirectives = ['+ Keep Dry', '+ Tailgate Lift', '+ Export Priority', '+ Weighbridge Slip'];
 
-  const handleAddItem = () => setItems([...items, { id: Date.now(), itemType: '', quantity: '', unit: 'Cartons', weight: '', weightUnit: 'kg' }]);
+  const handleAddItem = () =>
+    setItems([...items, { id: Date.now(), itemId: '', itemType: '', quantity: '', unit: 'units', weight: '', weightUnit: 'kg' }]);
   
   const handleRemoveItem = (id) => {
     if (items.length > 1) setItems(items.filter(item => item.id !== id));
   };
 
   const handleItemChange = (id, field, value) => {
-    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+    setItems(items.map(item => {
+      if (item.id !== id) return item;
+      if (field === 'itemType') {
+        const matched = itemsList.find(
+          (it) => it._id === value || `${it.name}${it.code ? ` (${it.code})` : ''}` === value
+        );
+        if (matched) {
+          const qty = Number(item.quantity) || 1;
+          const autoWeight = matched.weightKg ? String(qty * Number(matched.weightKg)) : item.weight;
+          return {
+            ...item,
+            itemId: matched._id,
+            itemType: value,
+            unit: matched.unitOfMeasure || 'units',
+            weight: item.weight || autoWeight,
+          };
+        }
+      }
+      if (field === 'quantity' && item.itemId) {
+        const matched = itemsList.find((it) => it._id === item.itemId);
+        if (matched?.weightKg && Number(value) > 0) {
+          return {
+            ...item,
+            quantity: value,
+            weight: String(Number(value) * Number(matched.weightKg)),
+          };
+        }
+      }
+      return { ...item, [field]: value };
+    }));
   };
 
   const toggleDirective = (dir) => {
@@ -120,17 +314,104 @@ const CreateBookingView = ({ onBack, editData }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const persistBooking = async (submitImmediately = true) => {
+    if (!validateForm()) return;
+
+    const actorId = currentUserId || resolveCurrentUserId();
+    if (!actorId) {
+      alert('Please log in first so your user ID can be attached to the booking.');
+      return;
+    }
+
+    const pickupId = formData.pickupStoreId || storesList[0]?._id;
+    const destStoreObj = storesList.find(
+      (s) => s._id === formData.destinationStore || s.name === formData.destinationStore
+    );
+    const destinationId = formData.destinationStoreId || destStoreObj?._id || '';
+
+    const mappedItems = items.map((line) => {
+      const matchedItem = itemsList.find(
+        (it) =>
+          it._id === line.itemId ||
+          it._id === line.itemType ||
+          `${it.name}${it.code ? ` (${it.code})` : ''}` === line.itemType
+      );
+      return {
+        item: matchedItem?._id || line.itemId,
+        quantity: Number(line.quantity),
+        unit: line.unit || matchedItem?.unitOfMeasure || 'units',
+      };
+    });
+
+    const payload = {
+      pickupStore: pickupId,
+      destinationStore: destinationId,
+      requestedBy: actorId,
+      updatedBy: actorId,
+      requestedPickupDate: formData.dispatchDate,
+      requestedTimeWindow: parseTimeSlot(formData.timeSlot),
+      items: mappedItems,
+      reason: [formData.specialInstructions, ...formData.directives].filter(Boolean).join(' | '),
+    };
+
+    setSubmitting(true);
+    try {
+      const editMongoId = editData?.mongoId || editData?.rawBooking?._id;
+      const url = editMongoId ? `${BOOKINGS_API}/${editMongoId}` : BOOKINGS_API;
+      const method = editMongoId ? 'PUT' : 'POST';
+
+      const res = await apiFetch(url, {
+        method,
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to save booking');
+      }
+
+      const savedBooking = data.booking;
+      if (submitImmediately && savedBooking?._id && ['Draft', 'Changes Requested'].includes(savedBooking.status)) {
+        const subRes = await apiFetch(`${BOOKINGS_API}/${savedBooking._id}/submit`, {
+          method: 'PATCH',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ updatedBy: actorId, reason: 'Submitted via Store Bookings UI' }),
+        });
+        const subData = await subRes.json();
+        if (!subRes.ok) {
+          throw new Error(subData.message || 'Booking saved as Draft, but submit failed');
+        }
+      }
+
+      if (onSaved) await onSaved();
+      alert(
+        editMongoId
+          ? 'Booking updated successfully!'
+          : submitImmediately
+            ? 'Booking created and submitted successfully!'
+            : 'Booking saved as Draft!'
+      );
+      onBack();
+    } catch (err) {
+      alert(err.message || 'Error saving booking');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (validateForm()) {
-      console.log(editData ? 'Valid Form Update:' : 'Valid Form Submit:', { formData, items });
-      alert(editData ? "Booking updated successfully!" : "Booking created successfully!");
-      onBack();
-    }
+    persistBooking(true);
   };
 
   const totalWeight = items.reduce((sum, item) => sum + (Number(item.weight) || 0), 0);
   const payloadPercentage = Math.min((totalWeight / 5000) * 100, 100).toFixed(0);
+  const selectedPickupObj =
+    storesList.find((s) => s._id === formData.pickupStoreId || s.name === formData.pickupStore) ||
+    storesList[0];
+  const selectedDestObj = storesList.find(
+    (s) => s._id === formData.destinationStore || s.name === formData.destinationStore
+  );
 
   return (
     <div className="flex flex-col bg-white w-full min-h-full">
@@ -148,7 +429,7 @@ const CreateBookingView = ({ onBack, editData }) => {
           </div>
           <div className="flex gap-3">
             <span className="px-3 py-1.5 bg-gray-50 text-gray-600 rounded-full text-[10px] font-bold tracking-wide flex items-center gap-1.5 border border-gray-100">
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> {editData ? 'Editing Booking' : 'Draft Booking #BKG-2026-0984'}
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> {editData ? `Editing #${editData.id}` : 'New Booking Draft'}
             </span>
             <span className="px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-[10px] font-bold tracking-wide flex items-center gap-1.5 border border-green-100">
               <CheckCircle2 size={14} /> TMS Tier-1 Node
@@ -175,34 +456,70 @@ const CreateBookingView = ({ onBack, editData }) => {
               <div>
                 <label className="flex justify-between text-[11px] font-bold text-gray-700 mb-2">
                   <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full border-2 border-green-700"></div> Pickup Store / Hub</span>
-                  <span className="text-gray-400 font-normal">Origin Gate 04</span>
+                  <span className="text-gray-400 font-normal">Origin Gate</span>
                 </label>
                 <div className="relative">
-                  <select className="w-full p-3.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600 outline-none appearance-none">
-                    <option>{formData.pickupStore}</option>
+                  <select
+                    value={formData.pickupStoreId || formData.pickupStore}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const found = storesList.find((s) => s._id === val || s.name === val);
+                      const nextPickupId = found?._id || val;
+                      setFormData((prev) => ({
+                        ...prev,
+                        pickupStoreId: nextPickupId,
+                        pickupStore: found ? found.name : val,
+                        destinationStore: prev.destinationStore === nextPickupId ? '' : prev.destinationStore,
+                        destinationStoreId: prev.destinationStoreId === nextPickupId ? '' : prev.destinationStoreId,
+                      }));
+                    }}
+                    className="w-full p-3.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600 outline-none appearance-none"
+                  >
+                    {storesList.map((st) => (
+                      <option key={st._id} value={st._id}>
+                        {st.name}
+                      </option>
+                    ))}
                   </select>
                   <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
                 <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-green-500"></span> Coordinates: 6.9491° N, 79.8887° E • Bay clearance standard
+                  <span className="w-1 h-1 rounded-full bg-green-500"></span> {selectedPickupObj?.address || selectedPickupObj?.region || 'Authorized Store Hub'}
                 </p>
               </div>
               <div>
                 <label className="flex justify-between text-[11px] font-bold text-gray-700 mb-2">
                   <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full border-2 border-red-500"></div> Destination Store / Depot</span>
-                  <span className="text-gray-400 font-normal">Terminal Berth 2</span>
+                  <span className="text-gray-400 font-normal">Destination Hub</span>
                 </label>
                 <div className="relative">
-                  <select value={formData.destinationStore} onChange={(e) => setFormData({...formData, destinationStore: e.target.value})} className={`w-full p-3.5 border rounded-lg text-sm bg-white outline-none appearance-none focus:ring-1 focus:ring-green-700 ${errors.destinationStore ? 'border-red-500' : 'border-gray-200'}`}>
+                  <select
+                    value={formData.destinationStore}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const found = storesList.find((s) => s._id === val || s.name === val);
+                      setFormData({
+                        ...formData,
+                        destinationStoreId: found?._id || val,
+                        destinationStore: val,
+                      });
+                    }}
+                    className={`w-full p-3.5 border rounded-lg text-sm bg-white outline-none appearance-none focus:ring-1 focus:ring-green-700 ${errors.destinationStore ? 'border-red-500' : 'border-gray-200'}`}
+                  >
                     <option value="">Select destination hub...</option>
-                    <option value="Galle Coastal Staging Terminal (Dakshinapatha LK-SP)">Galle Coastal Staging Terminal (Dakshinapatha LK-SP)</option>
-                    <option value="Kandy Regional Depot">Kandy Regional Depot</option>
+                    {storesList
+                      .filter((st) => st._id !== formData.pickupStoreId && st.name !== formData.pickupStore)
+                      .map((st) => (
+                        <option key={st._id} value={st._id}>
+                          {st.name}
+                        </option>
+                      ))}
                   </select>
                   <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
                 {errors.destinationStore && <p className="text-red-500 text-xs mt-1">{errors.destinationStore}</p>}
                 <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-green-500"></span> Deep-water export access • Bonded Customs clearance ready
+                  <span className="w-1 h-1 rounded-full bg-green-500"></span> {selectedDestObj?.address || selectedDestObj?.region || 'Authorized Destination Store'}
                 </p>
               </div>
             </div>
@@ -212,18 +529,18 @@ const CreateBookingView = ({ onBack, editData }) => {
                 <div className="flex gap-4 items-center">
                   <div className="bg-green-100 w-8 h-8 flex items-center justify-center rounded-md text-green-800 font-bold text-sm">A</div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-0.5">Direct Route via Southern Expressway (E01) <span className="text-[9px] bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Optimal ETA</span></p>
-                    <p className="text-[11px] text-gray-500">Colombo Interchange (Kaduwela / Kottawa) → Galle Pinnaduwa Exit</p>
+                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-0.5">Inter-Store Route <span className="text-[9px] bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Verified</span></p>
+                    <p className="text-[11px] text-gray-500">{selectedPickupObj?.name || ''} → {selectedDestObj?.name || ''}</p>
                   </div>
                 </div>
                 <div className="flex gap-8 text-right">
                   <div>
-                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-widest mb-1">Distance</p>
-                    <p className="text-sm font-bold text-gray-900">118.4 km</p>
+                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-widest mb-1">Items</p>
+                    <p className="text-sm font-bold text-gray-900">{items.length}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-widest mb-1">Est. Transit</p>
-                    <p className="text-sm font-bold text-green-700">2h 15m</p>
+                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-widest mb-1">Total Weight</p>
+                    <p className="text-sm font-bold text-green-700">{totalWeight.toLocaleString()} kg</p>
                   </div>
                 </div>
               </div>
@@ -250,7 +567,7 @@ const CreateBookingView = ({ onBack, editData }) => {
                   <input type="date" value={formData.dispatchDate} onChange={(e) => setFormData({...formData, dispatchDate: e.target.value})} className={`w-full pl-12 p-3.5 border rounded-lg text-sm text-gray-600 outline-none focus:ring-1 focus:ring-green-700 ${errors.dispatchDate ? 'border-red-500' : 'border-gray-200'}`} />
                 </div>
                 {errors.dispatchDate && <p className="text-red-500 text-xs mt-1">{errors.dispatchDate}</p>}
-                <p className="text-[10px] text-gray-400 mt-2">Dispatch planned on operating business Sunday cycle</p>
+                <p className="text-[10px] text-gray-400 mt-2">Select requested pickup date from database schedule</p>
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-2">Loading Dock Time Slot</label>
@@ -264,7 +581,7 @@ const CreateBookingView = ({ onBack, editData }) => {
                   <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
                 {errors.timeSlot && <p className="text-red-500 text-xs mt-1">{errors.timeSlot}</p>}
-                <p className="text-[10px] text-green-700 mt-2 flex items-center gap-1.5 font-medium"><ShieldAlert size={12}/> Driver must report 30 minutes ahead for chassis container seal checks</p>
+                <p className="text-[10px] text-green-700 mt-2 flex items-center gap-1.5 font-medium"><ShieldAlert size={12}/> Server validates slot and capacity rules</p>
               </div>
             </div>
           </div>
@@ -289,7 +606,14 @@ const CreateBookingView = ({ onBack, editData }) => {
                   <div className="flex-1 relative">
                     <select value={item.itemType} onChange={(e) => handleItemChange(item.id, 'itemType', e.target.value)} className={`w-full p-3 border-b text-sm bg-transparent text-gray-600 outline-none appearance-none focus:border-green-700 ${errors.items?.[index]?.itemType ? 'border-red-500' : 'border-gray-200'}`}>
                       <option value="">Select item...</option>
-                      {itemTypes.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      {itemsList.map((opt) => {
+                        const label = `${opt.name}${opt.code ? ` (${opt.code})` : ''}`;
+                        return (
+                          <option key={opt._id} value={label}>
+                            {label}
+                          </option>
+                        );
+                      })}
                     </select>
                     <ChevronRight className="absolute right-2 top-3.5 rotate-90 text-gray-400" size={16} />
                   </div>
@@ -376,7 +700,7 @@ const CreateBookingView = ({ onBack, editData }) => {
                 rows="4"
                 value={formData.specialInstructions}
                 onChange={(e) => setFormData({...formData, specialInstructions: e.target.value})}
-                placeholder="Provide special handling, customs seal instructions, dock gate access requirements, or temperature restrictions (e.g., Do not double-stack tea cartons; Inspect Colombo Customs tamper seal serial COL-8891 upon arrival)..."
+                placeholder="Provide special handling notes, dock instructions, or delivery remarks..."
                 className="w-full p-4 border border-gray-100 rounded-xl text-sm focus:ring-1 focus:ring-green-700 focus:border-green-700 outline-none text-gray-600 bg-gray-50/50 placeholder-gray-400 resize-none"
               ></textarea>
             </div>
@@ -411,11 +735,11 @@ const CreateBookingView = ({ onBack, editData }) => {
                 <ShieldAlert size={14} className="text-gray-400"/> Encrypted Master Data Record • SLA Verified • ISO-28000 Security Compliant
               </p>
               <div className="flex gap-4">
-                <button type="button" onClick={onBack} className="px-6 py-3 text-xs font-bold text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">Cancel</button>
-                <button type="button" className="px-6 py-3 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-2">
+                <button type="button" onClick={onBack} disabled={submitting} className="px-6 py-3 text-xs font-bold text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">Cancel</button>
+                <button type="button" onClick={() => persistBooking(false)} disabled={submitting} className="px-6 py-3 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-2">
                   <Save size={16}/> Save Draft
                 </button>
-                <button type="submit" className="px-8 py-3 bg-[#0d3b2e] rounded-lg text-xs font-bold text-white hover:bg-[#092a21] transition-colors flex items-center gap-2 shadow-sm">
+                <button type="submit" disabled={submitting} className="px-8 py-3 bg-[#0d3b2e] rounded-lg text-xs font-bold text-white hover:bg-[#092a21] transition-colors flex items-center gap-2 shadow-sm">
                   {editData ? 'Save Changes' : 'Submit Booking'} <Send size={16}/>
                 </button>
               </div>
@@ -445,28 +769,154 @@ const StoreBookings = () => {
   const [endDate, setEndDate] = useState('');
 
   const [bookings, setBookings] = useState([]);
-  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
-  const [bookingError, setBookingError] = useState('');
-  const [bookingNotice, setBookingNotice] = useState('');
+  const [storesList, setStoresList] = useState([]);
+  const [itemsList, setItemsList] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [bookingNotice, setBookingNotice] = useState('');
 
-  const loadBookings = useCallback(async () => {
-    setIsLoadingBookings(true);
-    setBookingError('');
+  const transformBookingFromApi = (b) => {
+    const pickupName = b.pickupStore?.name || '';
+    const destName = b.destinationStore?.name || '';
+    const lineSummaries = Array.isArray(b.items)
+      ? b.items.map((l) => {
+          const itemName = l.item?.name || '';
+          const qty = Number(l.quantity) || 0;
+          const unit = l.unit || l.item?.unitOfMeasure || 'units';
+          return `${itemName} (${qty} ${unit})`.trim();
+        })
+      : [];
+
+    const computedWeight = Array.isArray(b.items)
+      ? b.items.reduce((sum, l) => {
+          const qty = Number(l.quantity) || 0;
+          const wt = Number(l.item?.weightKg) || 0;
+          return sum + qty * wt;
+        }, 0)
+      : 0;
+
+    const formattedHistory = Array.isArray(b.changeHistory)
+      ? b.changeHistory.map((h) => ({
+          time: h.changedAt
+            ? new Date(h.changedAt).toLocaleString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              }) + ' IST'
+            : '',
+          action: h.reason ? `${h.action}: ${h.reason}` : `${h.action} (${h.toStatus})`,
+          by: h.changedBy?.name || h.changedBy?.username || (h.changedBy ? 'Authorized User' : 'System'),
+        }))
+      : [];
+
+    return {
+      mongoId: b._id,
+      id: b.bookingCode || b._id,
+      backendStatus: b.status,
+      status: mapBackendStatusToUi(b.status),
+      type: 'Outbound',
+      date: formatDisplayDate(b.requestedPickupDate, b.requestedTimeWindow),
+      rawDate: b.requestedPickupDate ? new Date(b.requestedPickupDate).toISOString().split('T')[0] : '',
+      from: pickupName,
+      to: destName,
+      cargo: lineSummaries.join(' & '),
+      consignments: Array.isArray(b.items) ? b.items.length : 0,
+      distance: b.distanceKm ? `${b.distanceKm} km` : '',
+      driver: b.assignedTrip?.driver?.name || '',
+      vehicle: b.assignedVehicle?.vehicleId || b.assignedVehicle?.plateNumber || '',
+      totalWeight: `${computedWeight.toLocaleString()} kg`,
+      history: formattedHistory,
+      rawBooking: b,
+    };
+  };
+
+  const fetchAllData = async () => {
     try {
-      const response = await api.get('/store-bookings');
-      setBookings((response.data?.bookings || []).map(mapStoreBooking));
-    } catch (error) {
-      setBookingError(error.response?.data?.message || 'Unable to load store bookings.');
-    } finally {
-      setIsLoadingBookings(false);
+      const headers = getAuthHeaders();
+      const [bookingsRes, storesRes, itemsRes, usersRes, meRes] = await Promise.allSettled([
+        apiFetch(BOOKINGS_API, { headers }),
+        apiFetch(`${API_ROOT}/stores`, { headers }),
+        apiFetch(`${API_ROOT}/items`, { headers }),
+        apiFetch(`${API_ROOT}/users`, { headers }),
+        apiFetch(`${API_ROOT}/auth/me`, { headers }),
+      ]);
+
+      let fetchedStores = [];
+      let fetchedItems = [];
+      let fetchedUsers = [];
+      let meUserId = '';
+
+      if (meRes.status === 'fulfilled' && meRes.value.ok) {
+        const mData = await meRes.value.json();
+        meUserId = extractUserIdFromAny(mData);
+      }
+
+      if (storesRes.status === 'fulfilled' && storesRes.value.ok) {
+        const sData = await storesRes.value.json();
+        fetchedStores = Array.isArray(sData) ? sData : sData.stores || sData.data || [];
+      }
+
+      if (itemsRes.status === 'fulfilled' && itemsRes.value.ok) {
+        const iData = await itemsRes.value.json();
+        fetchedItems = Array.isArray(iData) ? iData : iData.items || iData.data || [];
+      }
+
+      if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
+        const uData = await usersRes.value.json();
+        fetchedUsers = Array.isArray(uData) ? uData : uData.users || uData.data || [];
+      }
+
+      let rawList = [];
+      if (bookingsRes.status === 'fulfilled' && bookingsRes.value.ok) {
+        const bData = await bookingsRes.value.json();
+        rawList = Array.isArray(bData) ? bData : bData.bookings || [];
+        const mapped = rawList.map(transformBookingFromApi);
+        setBookings(mapped);
+
+        setSelectedBooking((prev) => {
+          if (!prev) return null;
+          return mapped.find((m) => (m.mongoId && m.mongoId === prev.mongoId) || m.id === prev.id) || null;
+        });
+      }
+
+      const bookingUserId = rawList.find((b) => isObjectId(b?.requestedBy?._id || b?.requestedBy))
+        ? (rawList.find((b) => isObjectId(b?.requestedBy?._id || b?.requestedBy)).requestedBy._id ||
+            rawList.find((b) => isObjectId(b?.requestedBy?._id || b?.requestedBy)).requestedBy)
+        : '';
+
+      setCurrentUserId(resolveCurrentUserId(fetchedUsers) || meUserId || bookingUserId || '');
+
+      if (fetchedStores.length === 0 && rawList.length > 0) {
+        const storeMap = new Map();
+        rawList.forEach((b) => {
+          if (b.pickupStore?._id) storeMap.set(b.pickupStore._id, b.pickupStore);
+          if (b.destinationStore?._id) storeMap.set(b.destinationStore._id, b.destinationStore);
+        });
+        fetchedStores = Array.from(storeMap.values());
+      }
+
+      if (fetchedItems.length === 0 && rawList.length > 0) {
+        const itemMap = new Map();
+        rawList.forEach((b) => {
+          (b.items || []).forEach((l) => {
+            if (l.item?._id) itemMap.set(l.item._id, l.item);
+          });
+        });
+        fetchedItems = Array.from(itemMap.values());
+      }
+
+      setStoresList(fetchedStores);
+      setItemsList(fetchedItems);
+    } catch (err) {
+      console.error('Failed to load store bookings:', err);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void loadBookings(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadBookings]);
+    fetchAllData();
+  }, []);
+
   const filteredBookings = bookings.filter(booking => {
     const matchesSearch = 
       booking.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -506,9 +956,18 @@ const StoreBookings = () => {
     }
   };
 
-  const canEditOrCancel = (status) => ['Draft', 'Pending Approval', 'Changes Requested', 'Confirmed'].includes(status);
+  const canEditBooking = (booking) => {
+    if (!booking) return false;
+    return ['Draft', 'Changes Requested'].includes(booking.backendStatus);
+  };
+
+  const canCancelBooking = (booking) => {
+    if (!booking) return false;
+    return ['Draft', 'Submitted', 'Changes Requested', 'Approved'].includes(booking.backendStatus);
+  };
 
   const handleEditClick = () => {
+    if (!selectedBooking) return;
     setBookingToEdit(selectedBooking);
     setIsCreating(true);
   };
@@ -543,49 +1002,70 @@ const StoreBookings = () => {
   };
 
   const handleDownloadClick = () => {
-    alert("Downloading Booking Details...");
+    if (!selectedBooking) return;
+    const blob = new Blob([JSON.stringify(selectedBooking.rawBooking || selectedBooking, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedBooking.id}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleCancelBookingClick = async () => {
-    if (!selectedBooking?._id) return;
-    const reason = window.prompt(`Why are you cancelling ${selectedBooking.id}?`);
-    if (reason === null) return;
-    if (!reason.trim()) {
-      setBookingError('A cancellation reason is required.');
-      return;
-    }
+    if (!selectedBooking || !selectedBooking.mongoId) return;
+    const reason = window.prompt('Enter cancellation reason:', 'Cancelled by store user');
+    if (!reason?.trim()) return;
+
     setIsCancelling(true);
-    setBookingError('');
     setBookingNotice('');
     try {
-      const response = await api.patch(`/store-bookings/${selectedBooking._id}/cancel`, { reason: reason.trim() });
-      const updated = {
-        ...selectedBooking,
-        status: response.data.booking?.status || 'Cancelled',
-        history: [...(selectedBooking.history || []), { time: new Date().toLocaleString(), action: 'CANCELLED', by: 'You' }],
-      };
-      setBookings((previous) => previous.map((booking) => booking._id === updated._id ? updated : booking));
-      setSelectedBooking(updated);
-      setBookingError('');
-      const trip = response.data.trip;
+      const res = await apiFetch(`${BOOKINGS_API}/${selectedBooking.mongoId}/cancel`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ updatedBy: currentUserId, reason: reason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to cancel booking');
+      }
+      await fetchAllData();
+      const trip = data.trip;
       setBookingNotice(trip
-        ? `Booking cancelled. Trip ${trip.id} recalculated: ${trip.load || '0 Units'} · ${trip.route || 'no remaining route'} · ${trip.activeReservationsRevalidated || 0} reservations revalidated.`
+        ? `Booking cancelled. Trip ${trip.id || ''} recalculated: ${trip.load || '0 Units'}; ${trip.route || 'no remaining route'}; ${trip.activeReservationsRevalidated || 0} reservations revalidated.`
         : 'Booking cancelled successfully.');
-    } catch (error) {
-      setBookingError(error.response?.data?.message || 'Could not cancel this booking.');
+    } catch (err) {
+      alert(err.message || 'Error cancelling booking');
     } finally {
       setIsCancelling(false);
     }
   };
 
   if (isCreating) {
-    return <CreateBookingView onBack={handleBackToList} editData={bookingToEdit} />;
+    return (
+      <CreateBookingView
+        onBack={handleBackToList}
+        editData={bookingToEdit}
+        storesList={storesList}
+        itemsList={itemsList}
+        currentUserId={currentUserId}
+        onSaved={fetchAllData}
+      />
+    );
   }
 
   const countAll = bookings.length;
   const countInTransit = bookings.filter(b => b.status === 'In Transit').length;
   const countConfirmed = bookings.filter(b => b.status === 'Confirmed').length;
   const countPending = bookings.filter(b => b.status === 'Pending Approval').length;
+  const activeOrdersCount = bookings.filter(b => !['Completed', 'Cancelled', 'Rejected'].includes(b.backendStatus)).length;
+
+  const selectedRaw = selectedBooking?.rawBooking || {};
+  const selectedRawItems = Array.isArray(selectedRaw.items) ? selectedRaw.items : [];
 
   return (
     <div className="flex flex-col bg-gray-50"> 
@@ -599,7 +1079,7 @@ const StoreBookings = () => {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-medium">{bookings.filter((booking) => !['Cancelled', 'Completed'].includes(booking.status)).length} Active Orders</span>
+          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-medium">{activeOrdersCount} Active Orders</span>
           <button 
             onClick={handleExportCSV}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer shadow-sm"
@@ -612,11 +1092,13 @@ const StoreBookings = () => {
         </div>
       </div>
 
-      {bookingNotice && <div role="status" className="mx-6 mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">{bookingNotice}</div>}
+      {bookingNotice && (
+        <div role="status" className="mx-6 mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {bookingNotice}
+        </div>
+      )}
 
       <div className="flex px-6 pb-6 gap-6 items-start"> 
-
-        {bookingError && <div role="alert" className="fixed right-6 top-6 z-50 max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg">{bookingError}</div>}
         
         {/* Left Column: List */}
         <div className="flex-1 min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -697,9 +1179,9 @@ const StoreBookings = () => {
           </div>
 
           <div>
-            {isLoadingBookings ? <div className="p-8 text-center text-sm text-gray-500">Loading bookings…</div> : filteredBookings.length > 0 ? (
+            {filteredBookings.length > 0 ? (
               filteredBookings.map((booking) => (
-                <div key={booking.id} onClick={() => setSelectedBooking(booking)} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-green-50/30' : ''}`}>
+                <div key={booking.mongoId || booking.id} onClick={() => setSelectedBooking(booking)} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-green-50/30' : ''}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="font-bold text-gray-900 text-sm">#{booking.id}</span>
@@ -759,7 +1241,7 @@ const StoreBookings = () => {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">#{selectedBooking.id}</h2>
-                  <p className="text-xs text-gray-500 mt-1">Created on {selectedBooking.date.split(' - ')[0]} by <span className="font-bold text-gray-700">Dispatcher N. Perera</span></p>
+                  <p className="text-xs text-gray-500 mt-1">Created on {selectedBooking.date.split(' - ')[0]} • Status: <span className="font-bold text-gray-700">{selectedBooking.backendStatus}</span></p>
                 </div>
                 <div className="flex gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(selectedBooking.status)} flex items-center gap-1`}>
@@ -773,13 +1255,13 @@ const StoreBookings = () => {
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-[#113b2e] rounded text-white shrink-0"><Truck size={16} /></div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-gray-900 truncate">{selectedBooking.from.split(' ')[0]} → {selectedBooking.to.split(' ')[0]}</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">via Southern Expy (E01)</p>
+                    <p className="text-xs font-bold text-gray-900 truncate">{selectedBooking.from} → {selectedBooking.to}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{selectedRaw.requestedTimeWindow?.startTime || ''} {selectedRaw.requestedTimeWindow?.endTime ? `- ${selectedRaw.requestedTimeWindow.endTime}` : ''}</p>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-xs font-bold text-gray-900">{selectedBooking.distance}</p>
-                  <p className="text-[10px] text-green-600 font-bold mt-0.5">Live GPS Active</p>
+                  <p className="text-xs font-bold text-gray-900">{selectedBooking.totalWeight}</p>
+                  <p className="text-[10px] text-green-600 font-bold mt-0.5">{selectedBooking.backendStatus}</p>
                 </div>
               </div>
             </div>
@@ -790,7 +1272,7 @@ const StoreBookings = () => {
                   <button onClick={() => setActiveTab('milestones')} className={`pb-3 text-sm font-bold border-b-2 ${activeTab === 'milestones' ? 'border-[#113b2e] text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700'}`}>Consignment Milestones</button>
                   <button onClick={() => setActiveTab('history')} className={`pb-3 text-sm font-bold border-b-2 ${activeTab === 'history' ? 'border-[#113b2e] text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700'}`}>Change History</button>
                 </div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Step 3 of 4</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{selectedBooking.backendStatus}</span>
               </div>
 
               <div className="p-6">
@@ -800,28 +1282,24 @@ const StoreBookings = () => {
                         <div className="relative">
                           <CheckCircle2 className="absolute -left-[31px] bg-white text-[#113b2e]" size={18} />
                           <h4 className="text-sm font-bold text-gray-900">Request Created</h4>
-                          <p className="text-xs text-gray-500 mt-1">Oct 27, 14:15 IST • Order confirmed & manifest verified</p>
+                          <p className="text-xs text-gray-500 mt-1">{selectedBooking.date}</p>
                         </div>
                         <div className="relative">
-                          <CheckCircle2 className="absolute -left-[31px] bg-white text-[#113b2e]" size={18} />
-                          <h4 className="text-sm font-bold text-gray-900">Vehicle Assigned</h4>
-                          <p className="text-xs text-gray-500 mt-1">Oct 27, 18:30 IST • Isuzu FVR 10-Wheeler ({selectedBooking.vehicle}), Driver Kapila J.</p>
+                          <CheckCircle2 className={`absolute -left-[31px] bg-white ${selectedBooking.vehicle || selectedBooking.driver ? 'text-[#113b2e]' : 'text-gray-300'}`} size={18} />
+                          <h4 className="text-sm font-bold text-gray-900">Vehicle & Driver</h4>
+                          <p className="text-xs text-gray-500 mt-1">{[selectedBooking.vehicle, selectedBooking.driver].filter(Boolean).join(' • ') || 'Pending allocation'}</p>
                         </div>
                         {selectedBooking.status === 'In Transit' && (
                           <div className="relative border-l-2 border-dashed border-gray-200 -ml-[2px] pl-[26px]">
                             <Truck className="absolute -left-[27px] bg-white text-[#113b2e] p-0.5 border-2 border-[#113b2e] rounded-full" size={18} />
-                            <h4 className="text-sm font-bold text-gray-900 flex items-center gap-1">Departed Origin / In Transit <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span></h4>
-                            <p className="text-xs text-gray-500 mt-1">Oct 28, 08:30 AM IST • Passed Kottawa Interchange</p>
-                            <div className="mt-2 flex gap-2">
-                               <span className="text-[10px] font-bold bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100">Speed: 72 km/h</span>
-                               <span className="text-[10px] font-bold bg-gray-50 text-gray-600 px-2 py-1 rounded border border-gray-200">Lat: 6.840 - Lng: 79.998</span>
-                            </div>
+                            <h4 className="text-sm font-bold text-gray-900 flex items-center gap-1">In Transit <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span></h4>
+                            <p className="text-xs text-gray-500 mt-1">{selectedBooking.from} → {selectedBooking.to}</p>
                           </div>
                         )}
                         <div className="relative border-l-2 border-transparent -ml-[2px] pl-[26px]">
-                          <CheckCircle2 className="absolute -left-[27px] bg-white text-gray-300" size={18} />
-                          <h4 className="text-sm font-bold text-gray-400">Gate Arrival & Offload</h4>
-                          <p className="text-xs text-gray-400 mt-1">Est. Arrival Today, 12:45 PM IST at Galle Bay 04</p>
+                          <CheckCircle2 className={`absolute -left-[27px] bg-white ${selectedBooking.status === 'Completed' ? 'text-[#113b2e]' : 'text-gray-300'}`} size={18} />
+                          <h4 className={`text-sm font-bold ${selectedBooking.status === 'Completed' ? 'text-gray-900' : 'text-gray-400'}`}>Gate Arrival & Offload</h4>
+                          <p className="text-xs text-gray-400 mt-1">{selectedBooking.to}</p>
                         </div>
                      </div>
 
@@ -831,29 +1309,32 @@ const StoreBookings = () => {
                         <div className="flex gap-2 mb-3">
                            <div className="bg-gray-50 border border-gray-100 flex-1 p-3 rounded text-xs">
                               <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Origin Hub</span>
-                              <p className="font-bold text-gray-900 mt-1">{selectedBooking.from.split(' (')[0]}</p>
-                              <p className="text-gray-500 mt-1 leading-tight">Peliyagoda Central Hub, Bay 08</p>
+                              <p className="font-bold text-gray-900 mt-1">{selectedBooking.from}</p>
+                              <p className="text-gray-500 mt-1 leading-tight">{selectedRaw.pickupStore?.address || selectedRaw.pickupStore?.region || ''}</p>
                            </div>
                            <div className="bg-gray-50 border border-gray-100 flex-1 p-3 rounded text-xs">
                               <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Destination Hub</span>
                               <p className="font-bold text-gray-900 mt-1">{selectedBooking.to}</p>
-                              <p className="text-gray-500 mt-1 leading-tight">Dakshinapatha Berth 2</p>
+                              <p className="text-gray-500 mt-1 leading-tight">{selectedRaw.destinationStore?.address || selectedRaw.destinationStore?.region || ''}</p>
                            </div>
                         </div>
-                        <div className="bg-gray-50 border border-gray-100 p-3 rounded flex items-center justify-between">
-                           <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-[#113b2e] rounded-full flex items-center justify-center text-white text-xs font-bold tracking-wider">KJ</div>
-                              <div>
-                                <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.driver}</p>
-                                <p className="text-[10px] text-gray-500">+94 77 123 4567</p>
-                              </div>
-                              <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded ml-2">Verified<br/>Driver</span>
-                           </div>
-                           <div className="text-right">
-                              <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.vehicle}</p>
-                              <p className="text-[10px] text-gray-500">Isuzu FVR<br/>10-W</p>
-                           </div>
-                        </div>
+                        {(selectedBooking.driver || selectedBooking.vehicle) && (
+                          <div className="bg-gray-50 border border-gray-100 p-3 rounded flex items-center justify-between">
+                             <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-[#113b2e] rounded-full flex items-center justify-center text-white text-xs font-bold tracking-wider">
+                                  {(selectedBooking.driver || 'DR').slice(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.driver}</p>
+                                  <p className="text-[10px] text-gray-500">{selectedRaw.assignedTrip?.driver?.phone || ''}</p>
+                                </div>
+                             </div>
+                             <div className="text-right">
+                                <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.vehicle}</p>
+                                <p className="text-[10px] text-gray-500">{selectedRaw.assignedVehicle?.vehicleType || ''}</p>
+                             </div>
+                          </div>
+                        )}
                      </div>
 
                      {/* Manifest Items */}
@@ -863,31 +1344,30 @@ const StoreBookings = () => {
                            <span className="text-[10px] font-bold text-gray-600">Total: {selectedBooking.totalWeight}</span>
                         </div>
                         <div className="border border-gray-200 rounded text-sm bg-white divide-y divide-gray-100">
-                           <div className="p-3 flex justify-between items-center">
-                              <div>
-                                 <p className="font-bold text-gray-800 text-xs">Pure Ceylon BOPF Tea (Cartons)</p>
-                                 <p className="text-[10px] text-gray-500 mt-0.5">Palletized - Sealed Grade A</p>
-                              </div>
-                              <div className="text-right">
-                                 <p className="font-bold text-gray-800 text-xs">2,000 kg</p>
-                                 <p className="text-[10px] text-gray-500 mt-0.5">80 units</p>
-                              </div>
-                           </div>
-                           <div className="p-3 flex justify-between items-center">
-                              <div>
-                                 <p className="font-bold text-gray-800 text-xs">Organic Ceylon Cinnamon Quills (Bales)</p>
-                                 <p className="text-[10px] text-gray-500 mt-0.5">Export Certification Attached</p>
-                              </div>
-                              <div className="text-right">
-                                 <p className="font-bold text-gray-800 text-xs">700 kg</p>
-                                 <p className="text-[10px] text-gray-500 mt-0.5">35 units</p>
-                              </div>
-                           </div>
+                           {selectedRawItems.map((line, idx) => {
+                             const itemObj = typeof line.item === 'object' ? line.item : {};
+                             const qty = Number(line.quantity) || 0;
+                             const unitWt = Number(itemObj.weightKg) || 0;
+                             return (
+                               <div key={line._id || idx} className="p-3 flex justify-between items-center">
+                                  <div>
+                                     <p className="font-bold text-gray-800 text-xs">{itemObj.name || ''}</p>
+                                     <p className="text-[10px] text-gray-500 mt-0.5">{itemObj.code || ''}</p>
+                                  </div>
+                                  <div className="text-right">
+                                     <p className="font-bold text-gray-800 text-xs">{(qty * unitWt).toLocaleString()} kg</p>
+                                     <p className="text-[10px] text-gray-500 mt-0.5">{qty} {line.unit || 'units'}</p>
+                                  </div>
+                               </div>
+                             );
+                           })}
                         </div>
-                        <div className="mt-3 bg-green-50/50 border border-green-100 rounded p-2.5 flex items-start gap-2">
-                           <CheckCircle2 size={14} className="text-green-600 mt-0.5 shrink-0" />
-                           <p className="text-[10px] font-bold text-green-800">Compliant: Current payload 2.7T within 5.0T gross axle rating.</p>
-                        </div>
+                        {selectedRaw.reviewNote && (
+                          <div className="mt-3 bg-green-50/50 border border-green-100 rounded p-2.5 flex items-start gap-2">
+                             <CheckCircle2 size={14} className="text-green-600 mt-0.5 shrink-0" />
+                             <p className="text-[10px] font-bold text-green-800">{selectedRaw.reviewNote}</p>
+                          </div>
+                        )}
                      </div>
                   </div>
                 ) : (
@@ -918,8 +1398,8 @@ const StoreBookings = () => {
                {/* 2. Cancel Button */}
                <button 
                   onClick={handleCancelBookingClick}
-                  disabled={!canEditOrCancel(selectedBooking.status) || isCancelling}
-                  className={`px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${canEditOrCancel(selectedBooking.status) ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'}`}
+                  disabled={!canCancelBooking(selectedBooking) || isCancelling}
+                  className={`px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${canCancelBooking(selectedBooking) && !isCancelling ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'}`}
                >
                   {isCancelling ? 'Cancelling…' : 'Cancel Booking'}
                </button>
@@ -927,8 +1407,8 @@ const StoreBookings = () => {
                {/* 3. Edit Button */}
                <button 
                   onClick={handleEditClick}
-                  disabled={!canEditOrCancel(selectedBooking.status)} 
-                  className={`px-6 py-2.5 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm ${canEditOrCancel(selectedBooking.status) ? 'bg-[#0f3c2c] text-white hover:bg-[#0a2e21]' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                  disabled={!canEditBooking(selectedBooking)}
+                  className={`px-6 py-2.5 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm ${canEditBooking(selectedBooking) ? 'bg-[#0f3c2c] text-white hover:bg-[#0a2e21]' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                >
                   <Edit2 size={16} /> Edit Booking
                </button>
