@@ -1,8 +1,14 @@
 const mongoose = require('mongoose');
 const { StoreBooking } = require('../models/StoreBooking');
 const { cancelStoreBooking: cancelStoreBookingAndRevalidate } = require('../services/storeBookingCancellationService');
+const Store = require('../models/store');
+const Item = require('../models/item');
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+const storeRefId = (store) => {
+  const id = store && typeof store === 'object' && store._id ? store._id : store;
+  return id ? id.toString() : '';
+};
 
 const ALLOWED_TRANSITIONS = {
   Draft: ['Submitted', 'Cancelled'],
@@ -26,6 +32,24 @@ const addAuditLog = (booking, { action, fromStatus, toStatus, changedBy, reason 
   });
 };
 
+// Read-only catalog data used by store users to create a booking.
+exports.getStoreBookingOptions = async (req, res) => {
+  const scopeErr = checkUserRoleAndStoreScope(req, null, {
+    allowedRoles: ['store employee', 'store manager', 'admin'],
+  });
+  if (scopeErr) return res.status(403).json({ message: scopeErr });
+
+  try {
+    const [stores, items] = await Promise.all([
+      Store.find({ status: 'Active' }).sort({ id: 1, code: 1, createdAt: 1 }).lean(),
+      Item.find({ status: 'Active' }).sort({ name: 1 }).lean(),
+    ]);
+    return res.status(200).json({ stores, items });
+  } catch (err) {
+    return res.status(500).json({ message: 'Unable to load booking options', error: err.message });
+  }
+};
+
 // Role & Store Scope helper (NFR-01, NFR-02, SRS Section 3)
 // Enforces checks when req.user is present; allows direct API/Postman testing when req.user is absent.
 const checkUserRoleAndStoreScope = (req, booking, { allowedRoles = null, checkBookingStores = false } = {}) => {
@@ -42,14 +66,16 @@ const checkUserRoleAndStoreScope = (req, booking, { allowedRoles = null, checkBo
   }
 
   if (checkBookingStores && !isAdmin && booking) {
-    const userStoreId = req.user.storeId || req.user.store || req.user.assignedStore;
-    if (userStoreId) {
-      const uStore = userStoreId.toString();
-      const pStore = booking.pickupStore ? booking.pickupStore.toString() : '';
-      const dStore = booking.destinationStore ? booking.destinationStore.toString() : '';
-      if (uStore !== pStore && uStore !== dStore) {
-        return 'Access denied: booking does not belong to your store scope';
-      }
+    const userStoreId = req.user.storeId;
+    if (!userStoreId || !isValidId(userStoreId)) {
+      return 'No store has been assigned to your account';
+    }
+
+    const uStore = userStoreId.toString();
+    const pStore = storeRefId(booking.pickupStore);
+    const dStore = storeRefId(booking.destinationStore);
+    if (uStore !== pStore && uStore !== dStore) {
+      return 'Access denied: booking does not belong to your store scope';
     }
   }
 
@@ -126,7 +152,7 @@ exports.createStoreBooking = async (req, res) => {
       items,
       stops,
     } = body;
-    const actorId = requestedBy || req.user?._id || req.user?.id;
+    const actorId = req.user?.userId || req.user?._id || requestedBy || req.user?.id;
 
     if (!actorId || !isValidId(actorId)) {
       return res.status(400).json({ message: 'Valid requestedBy user ID is required' });
@@ -140,6 +166,19 @@ exports.createStoreBooking = async (req, res) => {
     });
     if (errorMsg) {
       return res.status(400).json({ message: errorMsg });
+    }
+
+    if (req.user) {
+      const rawRole = (req.user.role || '').toString().toLowerCase();
+      const isAdmin = ['admin', 'system administrator', 'administrator'].includes(rawRole);
+      const userStoreId = req.user.storeId;
+      if (!isAdmin && (!userStoreId || userStoreId.toString() !== pickupStore.toString())) {
+        return res.status(403).json({
+          message: userStoreId
+            ? 'You can only create bookings from your assigned store'
+            : 'No store has been assigned to your account',
+        });
+      }
     }
 
     const booking = new StoreBooking({
@@ -184,8 +223,14 @@ exports.getStoreBookings = async (req, res) => {
     if (req.user) {
       const rawRole = (req.user.role || '').toString().toLowerCase();
       const isAdmin = ['admin', 'system administrator', 'administrator'].includes(rawRole);
-      const userStoreId = req.user.storeId || req.user.store || req.user.assignedStore;
-      if (!isAdmin && userStoreId && isValidId(userStoreId) && !req.query.storeId) {
+      const userStoreId = req.user.storeId;
+      if (!isAdmin && (!userStoreId || !isValidId(userStoreId))) {
+        return res.status(403).json({ message: 'No store has been assigned to your account' });
+      }
+      if (!isAdmin && req.query.storeId && req.query.storeId !== userStoreId.toString()) {
+        return res.status(403).json({ message: "Access denied. You cannot access another store's data." });
+      }
+      if (!isAdmin) {
         filter.$or = [{ pickupStore: userStoreId }, { destinationStore: userStoreId }];
       }
     }
@@ -275,7 +320,7 @@ exports.updateStoreBooking = async (req, res) => {
     const nextDate = body.requestedPickupDate ?? booking.requestedPickupDate;
     const nextItems = body.items ?? booking.items;
     const actorId =
-      body.updatedBy || req.user?._id || req.user?.id || booking.requestedBy;
+      body.updatedBy || req.user?.userId || req.user?._id || req.user?.id || booking.requestedBy;
 
     const errorMsg = await validateStoresAndItems({
       pickupStore: nextPickup,
@@ -375,7 +420,7 @@ exports.recordHandoverAndReceipt = async (req, res) => {
       }
     }
 
-    const actorId = body.updatedBy || req.user?._id || req.user?.id || booking.requestedBy;
+    const actorId = body.updatedBy || req.user?.userId || req.user?._id || req.user?.id || booking.requestedBy;
     addAuditLog(booking, {
       action: 'HANDOVER_RECEIPT_RECORDED',
       fromStatus: booking.status,
@@ -438,7 +483,7 @@ exports.updateBookingStop = async (req, res) => {
       stop.notes = String(body.notes).trim();
     }
 
-    const actorId = body.updatedBy || req.user?._id || req.user?.id || booking.requestedBy;
+    const actorId = body.updatedBy || req.user?.userId || req.user?._id || req.user?.id || booking.requestedBy;
     addAuditLog(booking, {
       action: 'STOP_UPDATED',
       fromStatus: booking.status,
@@ -487,7 +532,7 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
     }
 
     const actorId =
-      body.reviewedBy || body.updatedBy || req.user?._id || req.user?.id || booking.requestedBy;
+      body.reviewedBy || body.updatedBy || req.user?.userId || req.user?._id || req.user?.id || booking.requestedBy;
     const prevStatus = booking.status;
 
     if (targetStatus === 'Cancelled') {

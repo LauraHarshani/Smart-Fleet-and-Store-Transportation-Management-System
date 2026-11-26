@@ -6,6 +6,7 @@ const ctrl = require('../controllers/StoreBookingController');
 router.use(protect);
 
 // Create, list, single view, history, update & cancel
+router.get('/options', ctrl.getStoreBookingOptions);
 router.post('/', ctrl.createStoreBooking);
 router.get('/', ctrl.getStoreBookings);
 router.get('/:id', ctrl.getStoreBookingById);

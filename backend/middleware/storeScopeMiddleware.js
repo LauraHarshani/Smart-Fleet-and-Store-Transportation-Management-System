@@ -8,7 +8,8 @@ const storeScope = (req, res, next) => {
             });
         }
 
-        const { role, store } = req.user;
+        const { role } = req.user;
+        const store = req.user.storeId;
 
         // Admins can access all stores
         if (role === "ADMIN") {

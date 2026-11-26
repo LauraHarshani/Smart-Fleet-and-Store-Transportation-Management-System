@@ -5,7 +5,8 @@ import {
   MapPin, Clock, Package, Trash2, ShieldAlert, Save, Send 
 } from 'lucide-react';
 
-const API_ROOT = 'http://localhost:5000/api';
+const configuredApiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
+const API_ROOT = configuredApiUrl.endsWith('/api') ? configuredApiUrl : `${configuredApiUrl}/api`;
 const BOOKINGS_API = `${API_ROOT}/store-bookings`;
 const apiFetch = (url, options = {}) => fetch(url, { ...options, credentials: 'include' });
 
@@ -150,8 +151,11 @@ const mapBackendStatusToUi = (backendStatus) => {
 // ==========================================
 // 1. CREATE / EDIT BOOKING COMPONENT (FE-3)
 // ==========================================
-const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], currentUserId, onSaved }) => {
-  const defaultPickupStore = storesList[0];
+const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], currentUserId, assignedStoreId, onSaved, onSuccess }) => {
+  const pickupStoresList = assignedStoreId
+    ? storesList.filter((store) => store._id === assignedStoreId)
+    : storesList;
+  const defaultPickupStore = pickupStoresList[0];
 
   const [formData, setFormData] = useState({
     pickupStoreId: defaultPickupStore?._id || '',
@@ -172,15 +176,15 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!editData && storesList.length > 0 && !formData.pickupStoreId) {
-      const first = storesList[0];
+    if (!editData && pickupStoresList.length > 0 && !formData.pickupStoreId) {
+      const first = pickupStoresList[0];
       setFormData((prev) => ({
         ...prev,
         pickupStoreId: first._id,
         pickupStore: first.name,
       }));
     }
-  }, [storesList, editData, formData.pickupStoreId]);
+  }, [storesList, assignedStoreId, editData, formData.pickupStoreId]);
 
   useEffect(() => {
     if (editData) {
@@ -318,12 +322,8 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
     if (!validateForm()) return;
 
     const actorId = currentUserId || resolveCurrentUserId();
-    if (!actorId) {
-      alert('Please log in first so your user ID can be attached to the booking.');
-      return;
-    }
 
-    const pickupId = formData.pickupStoreId || storesList[0]?._id;
+    const pickupId = formData.pickupStoreId || pickupStoresList[0]?._id;
     const destStoreObj = storesList.find(
       (s) => s._id === formData.destinationStore || s.name === formData.destinationStore
     );
@@ -346,8 +346,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
     const payload = {
       pickupStore: pickupId,
       destinationStore: destinationId,
-      requestedBy: actorId,
-      updatedBy: actorId,
+      ...(actorId ? { requestedBy: actorId, updatedBy: actorId } : {}),
       requestedPickupDate: formData.dispatchDate,
       requestedTimeWindow: parseTimeSlot(formData.timeSlot),
       items: mappedItems,
@@ -384,7 +383,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
       }
 
       if (onSaved) await onSaved();
-      alert(
+      onSuccess?.(
         editMongoId
           ? 'Booking updated successfully!'
           : submitImmediately
@@ -475,7 +474,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                     }}
                     className="w-full p-3.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600 outline-none appearance-none"
                   >
-                    {storesList.map((st) => (
+                    {pickupStoresList.map((st) => (
                       <option key={st._id} value={st._id}>
                         {st.name}
                       </option>
@@ -772,6 +771,7 @@ const StoreBookings = () => {
   const [storesList, setStoresList] = useState([]);
   const [itemsList, setItemsList] = useState([]);
   const [currentUserId, setCurrentUserId] = useState('');
+  const [assignedStoreId, setAssignedStoreId] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
   const [bookingNotice, setBookingNotice] = useState('');
 
@@ -834,37 +834,29 @@ const StoreBookings = () => {
   const fetchAllData = async () => {
     try {
       const headers = getAuthHeaders();
-      const [bookingsRes, storesRes, itemsRes, usersRes, meRes] = await Promise.allSettled([
+      const [bookingsRes, optionsRes, meRes] = await Promise.allSettled([
         apiFetch(BOOKINGS_API, { headers }),
-        apiFetch(`${API_ROOT}/stores`, { headers }),
-        apiFetch(`${API_ROOT}/items`, { headers }),
-        apiFetch(`${API_ROOT}/users`, { headers }),
+        apiFetch(`${BOOKINGS_API}/options`, { headers }),
         apiFetch(`${API_ROOT}/auth/me`, { headers }),
       ]);
 
       let fetchedStores = [];
       let fetchedItems = [];
-      let fetchedUsers = [];
       let meUserId = '';
+
+      if (optionsRes.status === 'fulfilled' && optionsRes.value.ok) {
+        const options = await optionsRes.value.json();
+        fetchedStores = Array.isArray(options.stores) ? options.stores : [];
+        fetchedItems = Array.isArray(options.items) ? options.items : [];
+      }
 
       if (meRes.status === 'fulfilled' && meRes.value.ok) {
         const mData = await meRes.value.json();
         meUserId = extractUserIdFromAny(mData);
-      }
-
-      if (storesRes.status === 'fulfilled' && storesRes.value.ok) {
-        const sData = await storesRes.value.json();
-        fetchedStores = Array.isArray(sData) ? sData : sData.stores || sData.data || [];
-      }
-
-      if (itemsRes.status === 'fulfilled' && itemsRes.value.ok) {
-        const iData = await itemsRes.value.json();
-        fetchedItems = Array.isArray(iData) ? iData : iData.items || iData.data || [];
-      }
-
-      if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
-        const uData = await usersRes.value.json();
-        fetchedUsers = Array.isArray(uData) ? uData : uData.users || uData.data || [];
+        const meUser = mData.user || mData.data?.user || {};
+        const role = String(meUser.role || '').toUpperCase();
+        const storeId = meUser.storeId || (typeof meUser.store === 'string' ? meUser.store : meUser.store?._id);
+        setAssignedStoreId(role === 'ADMIN' ? '' : (isObjectId(storeId) ? storeId : ''));
       }
 
       let rawList = [];
@@ -885,7 +877,7 @@ const StoreBookings = () => {
             rawList.find((b) => isObjectId(b?.requestedBy?._id || b?.requestedBy)).requestedBy)
         : '';
 
-      setCurrentUserId(resolveCurrentUserId(fetchedUsers) || meUserId || bookingUserId || '');
+      setCurrentUserId(meUserId || resolveCurrentUserId() || bookingUserId || '');
 
       if (fetchedStores.length === 0 && rawList.length > 0) {
         const storeMap = new Map();
@@ -1053,7 +1045,9 @@ const StoreBookings = () => {
         storesList={storesList}
         itemsList={itemsList}
         currentUserId={currentUserId}
+        assignedStoreId={assignedStoreId}
         onSaved={fetchAllData}
+        onSuccess={setBookingNotice}
       />
     );
   }
