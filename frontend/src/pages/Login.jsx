@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Truck, Mail, Lock, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
-import loginImage from '../assets/login.jpeg';
+import loginImage from '../assets/login.jpeg'; 
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
@@ -14,7 +14,7 @@ export default function Login() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
+  
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -67,7 +67,7 @@ export default function Login() {
         {/* Middle Promotional Content */}
         <div className="relative z-10 max-w-lg my-auto py-12">
           <h1 className="text-4xl font-extrabold tracking-tight leading-tight mb-6 text-white drop-shadow-sm">
-            Move goods between stores, without the wai
+            Move goods between stores, without the wait
           </h1>
           <p className="text-gray-200 text-sm leading-relaxed mb-10 drop-shadow-sm">
             Book transport, track your vehicle and confirm handover in one place.
@@ -128,11 +128,11 @@ export default function Login() {
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
                   <Mail size={18} />
                 </div>
-                <inpu
-                  type="email"
+                <input 
+                  type="email" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your Email"
+                  placeholder="Enter your Email" 
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#0fa979]/20 focus:border-[#0fa979] transition-all"
                   required
                 />
@@ -145,11 +145,11 @@ export default function Login() {
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
                   <Lock size={18} />
                 </div>
-                <inpu
-                  type={showPassword ? 'text' : 'password'}
+                <input 
+                  type={showPassword ? 'text' : 'password'} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder="Enter your password" 
                   className="w-full pl-11 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#0fa979]/20 focus:border-[#0fa979] transition-all"
                   required
                 />
@@ -167,16 +167,16 @@ export default function Login() {
 
             <div className="flex items-center justify-between text-xs font-medium pt-1">
               <label className="flex items-center gap-2 cursor-pointer text-gray-600">
-                <inpu
-                  type="checkbox"
+                <input 
+                  type="checkbox" 
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-[#0fa979] focus:ring-[#0fa979]"
+                  className="w-4 h-4 rounded border-gray-300 text-[#0fa979] focus:ring-[#0fa979]" 
                 />
                 Remember me
               </label>
-              <button
-                type="button"
+              <button 
+                type="button" 
                 onClick={() => { setShowForgotModal(true); setIsSubmitted(false); setForgotEmail(''); }}
                 className="text-[#0fa979] hover:underline font-semibold bg-transparent border-none cursor-pointer p-0"
               >
@@ -184,8 +184,8 @@ export default function Login() {
               </button>
             </div>
 
-            <button
-              type="submit"
+            <button 
+              type="submit" 
               disabled={isLoggingIn}
               className="w-full py-3.5 bg-[#0fa979] text-white rounded-xl font-bold text-sm hover:bg-[#0d9468] disabled:cursor-wait disabled:opacity-70 transition-colors shadow-[0_4px_12px_rgba(15,169,121,0.25)] mt-2 cursor-pointer"
             >
@@ -199,7 +199,7 @@ export default function Login() {
       {showForgotModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
-            <button
+            <button 
               onClick={() => setShowForgotModal(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
             >
@@ -213,29 +213,29 @@ export default function Login() {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-1">Forgot Password?</h3>
                 <p className="text-xs text-gray-500 mb-6">Enter your corporate email address and we'll dispatch a secure recovery token.</p>
-
+                
                 <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Corporate Email</label>
-                    <inpu
-                      type="email"
+                    <input 
+                      type="email" 
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="e.g. name@logifleet.lk"
+                      placeholder="e.g. name@logifleet.lk" 
                       className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:border-[#0fa979]"
                       required
                     />
                   </div>
                   <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
+                    <button 
+                      type="button" 
                       onClick={() => setShowForgotModal(false)}
                       className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors"
                     >
                       Cancel
                     </button>
-                    <button
-                      type="submit"
+                    <button 
+                      type="submit" 
                       className="flex-1 py-3 bg-[#113b2e] text-white font-bold rounded-xl text-xs hover:bg-[#0fa979] transition-colors shadow-sm"
                     >
                       Send Reset Link
@@ -250,7 +250,7 @@ export default function Login() {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Recovery Link Dispatched</h3>
                 <p className="text-xs text-gray-500 mb-6">We have sent a 48-hour secure cryptographic password reset token to <span className="font-semibold text-gray-800">{forgotEmail}</span>.</p>
-                <button
+                <button 
                   onClick={() => setShowForgotModal(false)}
                   className="w-full py-3 bg-[#113b2e] text-white font-bold rounded-xl text-xs hover:bg-[#0fa979] transition-colors shadow-sm"
                 >
