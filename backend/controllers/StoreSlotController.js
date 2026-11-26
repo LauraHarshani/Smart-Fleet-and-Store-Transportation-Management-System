@@ -3,7 +3,7 @@ const slotService = require("../services/slotService");
 // CREATE SLOT RESERVATION
 const createSlot = async (req, res) => {
   try {
-    const slot = await slotService.createSlot(req.body);
+    const slot = await slotService.createSlot(req.body, req.storeScope);
 
     return res.status(201).json({
       success: true,

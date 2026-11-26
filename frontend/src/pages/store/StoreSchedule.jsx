@@ -1,506 +1,491 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Calendar, Download, Plus, Clock, CheckCircle2, AlertCircle, 
-  ChevronLeft, ChevronRight, Info, Activity, X, AlertTriangle, Loader2
+import {
+  Activity, AlertCircle, Calendar, CheckCircle2, ChevronLeft, ChevronRight,
+  Clock, Download, Info, Loader2, MapPin, Plus, RefreshCw, Truck, X,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import api from '../../services/api';
+
+const isObjectId = (value) => typeof value === 'string' && /^[a-f\d]{24}$/i.test(value);
+const pad = (value) => String(value).padStart(2, '0');
+
+const getDateKey = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const formatDate = (value, options = { month: 'short', day: '2-digit' }) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString(undefined, options);
+};
+
+const formatTime = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+};
+
+const toDateTimeLocal = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const shiftDate = (value, days) => {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const getMonday = (value) => {
+  const monday = new Date(value);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return monday;
+};
+
+const getOperationLabel = (operationType) => {
+  if (operationType === 'Loading') return 'Outbound';
+  if (operationType === 'Unloading') return 'Inbound';
+  return operationType || 'Reservation';
+};
+
+const getSlotTone = (slot) => {
+  if (['Cancelled', 'Completed'].includes(slot.status)) return 'bg-gray-50 border-gray-200 text-gray-500';
+  if (slot.operationType === 'Unloading') return 'bg-[#ECFDF5] border-[#A7F3D0] text-[#047857]';
+  if (slot.operationType === 'Maintenance') return 'bg-[#FFF7ED] border-[#FED7AA] text-[#C2410C]';
+  return 'bg-[#F0F7FF] border-[#D0E2F8] text-[#1D4ED8]';
+};
 
 const StoreSchedule = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const storeId = user?.storeId || user?.store?._id || (isObjectId(user?.store) ? user.store : '');
+  const storeName = user?.storeName || (typeof user?.store === 'object' ? user.store?.name : user?.store) || 'Your Store';
 
-  // Modal & Toast States
-  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
-  const [isCancelOpen, setIsCancelOpen] = useState(false);
+  const [scheduleData, setScheduleData] = useState([]);
+  const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [viewMode, setViewMode] = useState('week');
+  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [operationFilter, setOperationFilter] = useState('All Operations');
+  const [selectedSlotId, setSelectedSlotId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [newStartAt, setNewStartAt] = useState('');
+  const [newEndAt, setNewEndAt] = useState('');
 
-  // Auto-hide toast
+  const visibleDays = useMemo(() => {
+    if (viewMode === 'day') return [new Date(anchorDate)];
+    const monday = getMonday(anchorDate);
+    return Array.from({ length: 5 }, (_, index) => shiftDate(monday, index));
+  }, [anchorDate, viewMode]);
+
+  const startOfView = useMemo(() => {
+    const start = new Date(visibleDays[0]);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }, [visibleDays]);
+
+  const endOfView = useMemo(() => {
+    const end = new Date(visibleDays[visibleDays.length - 1]);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }, [visibleDays]);
+
+  const fetchSchedule = useCallback(async () => {
+    if (!isObjectId(storeId)) {
+      setScheduleData([]);
+      setError('Your account does not have a valid assigned store. Please contact an administrator.');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.get('/schedules', {
+        params: {
+          startDate: startOfView.toISOString(),
+          endDate: endOfView.toISOString(),
+        },
+      });
+      if (!response.data?.success || !Array.isArray(response.data.data)) {
+        throw new Error(response.data?.message || 'Unexpected schedule response.');
+      }
+      setScheduleData(response.data.data);
+    } catch (fetchError) {
+      setScheduleData([]);
+      setError(fetchError.response?.data?.message || fetchError.message || 'Failed to load store schedule.');
+    } finally {
+      setLoading(false);
+    }
+  }, [endOfView, startOfView, storeId]);
+
+  useEffect(() => {
+    void fetchSchedule();
+  }, [fetchSchedule]);
+
   useEffect(() => {
     if (toast) {
-      const timer = setTimeout(() => setToast(null), 4000);
-      return () => clearTimeout(timer);
+      const timer = window.setTimeout(() => setToast(null), 4000);
+      return () => window.clearTimeout(timer);
     }
+    return undefined;
   }, [toast]);
 
-  const showToast = (type, message) => setToast({ type, message });
+  useEffect(() => {
+    if (!scheduleData.some((slot) => slot._id === selectedSlotId)) {
+      setSelectedSlotId(scheduleData[0]?._id || '');
+    }
+  }, [scheduleData, selectedSlotId]);
 
-  // 1. Export Schedule
-  const handleExport = () => {
-    const scheduleData = [
-      { date: '2026-11-09', time: '08:00 - 09:30', bookingId: 'BK-0830', bay: 'Bay 01', type: 'Inbound', route: 'From Kandy' },
-      { date: '2026-11-11', time: '08:00 - 09:30', bookingId: 'BK-0835', bay: 'Bay 02', type: 'Inbound', route: 'From Kandy' },
-      { date: '2026-11-12', time: '08:00 - 09:30', bookingId: 'BK-0839', bay: 'Bay 01', type: 'Outbound', route: 'To Jaffna' },
-      { date: '2026-11-11', time: '09:30 - 11:00', bookingId: 'BK-0834', bay: 'Bay 01', type: 'Outbound', route: 'To Kandy' },
-      { date: '2026-11-12', time: '09:30 - 11:00', bookingId: 'BK-0843', bay: 'Bay 03', type: 'Inbound', route: 'From Negombo' },
-      { date: '2026-11-09', time: '11:00 - 12:30', bookingId: 'BK-0832', bay: 'Bay 02', type: 'Outbound', route: 'To Galle' },
-      { date: '2026-11-10', time: '11:00 - 12:30', bookingId: 'BK-0837', bay: 'Bay 01', type: 'Outbound', route: 'To Negombo' },
-      { date: '2026-11-11', time: '11:00 - 12:30', bookingId: 'BK-0841', bay: 'Bay 02', type: 'Inbound', route: 'From Kandy' },
-      { date: '2026-11-10', time: '12:30 - 14:30', bookingId: 'BK-0836', bay: 'Bay 01', type: 'Inbound', route: 'From Galle' },
-      { date: '2026-11-12', time: '12:30 - 14:30', bookingId: 'BK-0842', bay: 'Bay 01', type: 'Outbound', route: 'To Galle' },
+  const filteredSlots = useMemo(() => scheduleData.filter((slot) => (
+    (statusFilter === 'All Statuses' || slot.status === statusFilter) &&
+    (operationFilter === 'All Operations' || slot.operationType === operationFilter)
+  )), [operationFilter, scheduleData, statusFilter]);
+
+  const selectedSlot = scheduleData.find((slot) => slot._id === selectedSlotId) || null;
+  const activeCount = scheduleData.filter((slot) => ['Reserved', 'Confirmed', 'Rescheduled'].includes(slot.status)).length;
+  const inboundCount = scheduleData.filter((slot) => slot.operationType === 'Unloading').length;
+  const outboundCount = scheduleData.filter((slot) => slot.operationType === 'Loading').length;
+  const completedCount = scheduleData.filter((slot) => slot.status === 'Completed').length;
+
+  const timeRows = useMemo(() => {
+    const defaults = ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30', '17:00'];
+    const starts = filteredSlots.map((slot) => formatTime(slot.startAt)).filter((time) => time !== '—');
+    return [...new Set([...defaults, ...starts])].sort();
+  }, [filteredSlots]);
+
+  const exportSchedule = () => {
+    const rows = [
+      ['Date', 'Start', 'End', 'Trip', 'Operation', 'Status', 'Vehicle', 'Route'],
+      ...filteredSlots.map((slot) => [
+        getDateKey(slot.startAt),
+        formatTime(slot.startAt),
+        formatTime(slot.endAt),
+        slot.trip?.id || '',
+        getOperationLabel(slot.operationType),
+        slot.status,
+        slot.vehicle || '',
+        slot.trip?.route || '',
+      ]),
     ];
-    const headers = ['Date', 'Time Window', 'Booking ID', 'Assigned Bay', 'Type', 'Route Details'];
-    const csvRows = scheduleData.map(row => [row.date, row.time, row.bookingId, row.bay, row.type, row.route]);
-    const csvContent = [headers.join(','), ...csvRows.map(row => row.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const csv = rows
+      .map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(','))
+      .join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'Store_Schedule_Nov_2026.csv');
-    document.body.appendChild(link);
+    link.download = 'store-schedule.csv';
     link.click();
-    document.body.removeChild(link);
-    showToast('info', 'Schedule exported successfully as CSV.');
+    URL.revokeObjectURL(url);
+    setToast({ type: 'info', message: 'Schedule exported successfully.' });
   };
 
-  const handleNewBooking = () => navigate('/store/new-booking');
-  const handleViewProgress = () => navigate('/store/trip-progress');
+  const handleReschedule = async (event) => {
+    event.preventDefault();
+    if (!selectedSlot) return;
+    if (!newStartAt || !newEndAt || new Date(newEndAt) <= new Date(newStartAt)) {
+      setToast({ type: 'error', message: 'Choose a valid end time after the start time.' });
+      return;
+    }
 
-  // 2. Reschedule Action
-  const handleRescheduleConfirm = (e) => {
-    e.preventDefault();
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setIsRescheduleOpen(false);
-      showToast('success', 'Booking BK-0841 has been rescheduled successfully.');
-    }, 1000);
+    setProcessing(true);
+    try {
+      await api.patch(`/store-slots/${selectedSlot._id}`, {
+        startAt: new Date(newStartAt).toISOString(),
+        endAt: new Date(newEndAt).toISOString(),
+      });
+      setShowReschedule(false);
+      setToast({ type: 'success', message: 'Reservation rescheduled successfully.' });
+      await fetchSchedule();
+    } catch (requestError) {
+      setToast({
+        type: 'error',
+        message: requestError.response?.data?.message || 'Unable to reschedule this reservation.',
+      });
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  // 3. Cancel Slot Action
-  const handleCancelConfirm = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setIsCancelOpen(false);
-      showToast('error', 'Booking BK-0841 has been cancelled.');
-      // In a real app, you would remove the booking from the state here
-    }, 1000);
+  const handleCancel = async () => {
+    if (!selectedSlot) return;
+    setProcessing(true);
+    try {
+      await api.patch(`/store-slots/${selectedSlot._id}/cancel`);
+      setShowCancel(false);
+      setToast({ type: 'success', message: 'Reservation cancelled successfully.' });
+      await fetchSchedule();
+    } catch (requestError) {
+      setShowCancel(false);
+      setToast({
+        type: 'error',
+        message: requestError.response?.data?.message || 'Unable to cancel this reservation.',
+      });
+    } finally {
+      setProcessing(false);
+    }
   };
+
+  const shiftView = (amount) => {
+    setAnchorDate((current) => shiftDate(current, amount * (viewMode === 'week' ? 7 : 1)));
+  };
+
+  const viewLabel = viewMode === 'day'
+    ? formatDate(anchorDate, { month: 'short', day: 'numeric', year: 'numeric' })
+    : `${formatDate(visibleDays[0])} – ${formatDate(visibleDays[visibleDays.length - 1], { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   return (
-    <div className="flex flex-col gap-5 font-sans pb-10 relative">
-      
-      {/* Toast Notification */}
+    <div className="relative flex flex-col gap-5 pb-10 font-sans">
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl border animate-in slide-in-from-top-2 fade-in duration-300 ${
-          toast.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
-          toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
-          'bg-blue-50 border-blue-200 text-blue-800'
+        <div className={`fixed right-6 top-6 z-50 flex max-w-lg items-center gap-3 rounded-lg border px-5 py-4 shadow-xl ${
+          toast.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' :
+            toast.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' :
+              'border-blue-200 bg-blue-50 text-blue-800'
         }`}>
-          {toast.type === 'success' && <CheckCircle2 size={20} className="text-green-600" />}
-          {toast.type === 'error' && <AlertCircle size={20} className="text-red-600" />}
-          {toast.type === 'info' && <Info size={20} className="text-blue-600" />}
+          {toast.type === 'success' ? <CheckCircle2 size={20} /> : toast.type === 'error' ? <AlertCircle size={20} /> : <Info size={20} />}
           <p className="text-sm font-bold">{toast.message}</p>
-          <button onClick={() => setToast(null)} className="ml-4 opacity-50 hover:opacity-100"><X size={16}/></button>
+          <button type="button" onClick={() => setToast(null)} className="ml-2 opacity-60 hover:opacity-100" aria-label="Dismiss message"><X size={16} /></button>
         </div>
       )}
 
-      {/* Header Section */}
-      <div className="flex justify-between items-start mb-5">
+      <header className="mb-1 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight text-gray-950">Store Schedule</h1>
-          <p className="mt-1 text-sm font-medium text-slate-500">Plan, allocate bays, and monitor inbound & outbound logistical time windows.</p>
+          <p className="mt-1 text-sm font-medium text-slate-500">Plan, allocate and monitor inbound and outbound store reservations.</p>
         </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors bg-white shadow-sm"
-          >
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={exportSchedule} disabled={!filteredSlots.length} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">
             <Download size={16} /> Export Schedule
           </button>
-          <button 
-            onClick={handleNewBooking}
-            className="flex items-center gap-2 px-4 py-2 bg-[#173F35] text-white rounded-lg text-sm font-semibold hover:bg-[#0F2C25] transition-colors shadow-sm"
-          >
+          <button type="button" onClick={() => navigate('/store/new-booking')} className="flex items-center gap-2 rounded-lg bg-[#173F35] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0F2C25]">
             <Plus size={16} /> New Booking
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-5">
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wide">TOTAL BOOKINGS</p>
-            <div className="mt-1 flex items-baseline gap-2">
-              <p className="text-3xl font-bold text-gray-800">16</p>
-              <span className="text-[11px] font-medium text-gray-500">(8 active)</span>
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
+
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="TOTAL RESERVATIONS" value={scheduleData.length} note={storeName} icon={<Calendar size={16} />} tone="blue" />
+        <KpiCard label="ACTIVE RESERVATIONS" value={activeCount} note="Reserved or confirmed" icon={<Clock size={16} />} tone="green" />
+        <KpiCard label="INBOUND SLOTS" value={inboundCount} note="Unloading at this store" icon={<CheckCircle2 size={16} />} tone="emerald" />
+        <KpiCard label="OUTBOUND SLOTS" value={outboundCount} note={`${completedCount} completed this week`} icon={<AlertCircle size={16} />} tone="amber" />
+      </section>
+
+      <div className="grid min-w-0 grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-[#FAFBFC] p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm font-bold text-gray-700 shadow-sm">
+                <button type="button" aria-label="Previous period" onClick={() => shiftView(-1)} className="rounded p-1 text-gray-500 hover:bg-gray-100"><ChevronLeft size={16} /></button>
+                <span className="min-w-36 text-center">{viewLabel}</span>
+                <button type="button" aria-label="Next period" onClick={() => shiftView(1)} className="rounded p-1 text-gray-500 hover:bg-gray-100"><ChevronRight size={16} /></button>
+              </div>
+              <button type="button" onClick={() => { setAnchorDate(new Date()); setViewMode('week'); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Today</button>
+              <select aria-label="Filter reservations by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs font-medium text-gray-600 outline-none">
+                <option>All Statuses</option>
+                {['Reserved', 'Confirmed', 'Rescheduled', 'Completed', 'Cancelled'].map((status) => <option key={status}>{status}</option>)}
+              </select>
+              <select aria-label="Filter reservations by operation" value={operationFilter} onChange={(event) => setOperationFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs font-medium text-gray-600 outline-none">
+                <option>All Operations</option>
+                {['Loading', 'Unloading', 'Maintenance'].map((operation) => <option key={operation}>{operation}</option>)}
+              </select>
+              <button type="button" onClick={() => void fetchSchedule()} className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"><RefreshCw size={14} /> Refresh</button>
             </div>
-            <p className="text-[10px] text-gray-400 mt-1 font-medium">9 - 15 Nov 2026</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
-            <Calendar size={16} />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wide">INBOUND SCHEDULED</p>
-            <div className="mt-1 flex items-baseline gap-2">
-              <p className="text-3xl font-bold text-[#15803D]">07</p>
-              <span className="text-[11px] font-medium text-gray-500">(4 active bays)</span>
+            <div className="flex rounded-lg bg-gray-200/70 p-1">
+              {['week', 'day'].map((mode) => (
+                <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-md px-4 py-1.5 text-xs font-bold capitalize ${viewMode === mode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>{mode}</button>
+              ))}
             </div>
-            <p className="text-[10px] text-gray-400 mt-1 font-medium">Kandy & Negombo</p>
           </div>
-          <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600">
-            <Clock size={16} />
-          </div>
-        </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wide">OUTBOUND DISPATCHED</p>
-            <div className="mt-1 flex items-baseline gap-2">
-              <p className="text-3xl font-bold text-[#1D4ED8]">05</p>
-              <span className="text-[11px] font-medium text-gray-500">(On schedule)</span>
-            </div>
-            <p className="text-[10px] text-gray-400 mt-1 font-medium">Galle & Kandy routes</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-            <CheckCircle2 size={16} />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] flex justify-between items-start">
-          <div>
-            <p className="text-[10px] text-gray-500 font-bold tracking-wide">AVAILABLE CAPACITY</p>
-            <div className="mt-1 flex items-baseline gap-2">
-              <p className="text-3xl font-bold text-gray-800">04</p>
-              <span className="text-[11px] font-medium text-gray-500">(Open windows)</span>
-            </div>
-            <p className="text-[10px] text-gray-400 mt-1 font-medium">Ready for allocation</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-500">
-            <AlertCircle size={16} />
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Layout */}
-      <div className="flex gap-5 items-start">
-        
-        {/* Calendar Section */}
-        <div className="flex-1 bg-white rounded-xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-gray-200 overflow-hidden">
-           
-           <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-[#FAFBFC]">
-             <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 shadow-sm">
-                  <button className="p-1 hover:bg-gray-100 rounded text-gray-500"><ChevronLeft size={16}/></button>
-                  <span>9 - 15 Nov 2026</span>
-                  <button className="p-1 hover:bg-gray-100 rounded text-gray-500"><ChevronRight size={16}/></button>
+          {loading ? (
+            <div className="flex min-h-80 items-center justify-center gap-2 text-sm text-gray-500"><Loader2 size={20} className="animate-spin" /> Loading schedule…</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <div className="min-w-[760px]">
+                <div className="grid border-b border-gray-200 bg-[#FAFBFC] text-center text-xs font-bold text-gray-700" style={{ gridTemplateColumns: `72px repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
+                  <div className="border-r border-gray-200 py-3 text-[10px] font-medium text-gray-400">TIME</div>
+                  {visibleDays.map((day) => {
+                    const key = getDateKey(day);
+                    const count = filteredSlots.filter((slot) => getDateKey(slot.startAt) === key).length;
+                    const isToday = getDateKey(new Date()) === key;
+                    return (
+                      <div key={key} className={`border-r border-gray-200 py-2.5 last:border-r-0 ${isToday ? 'bg-blue-50/40 text-blue-900' : ''}`}>
+                        {day.toLocaleDateString(undefined, { weekday: 'short' })} {pad(day.getDate())}
+                        <span className={`mt-0.5 block text-[10px] font-medium ${isToday ? 'text-blue-500' : 'text-gray-400'}`}>{isToday ? 'Today · ' : ''}{count} {count === 1 ? 'slot' : 'slots'}</span>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {timeRows.map((time) => (
+                  <div key={time} className="grid min-h-[94px] text-xs" style={{ gridTemplateColumns: `72px repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
+                    <div className="border-b border-r border-gray-200 bg-gray-50/50 p-2 text-right font-medium text-gray-500">{time}</div>
+                    {visibleDays.map((day) => {
+                      const dayKey = getDateKey(day);
+                      const slots = filteredSlots.filter((slot) => getDateKey(slot.startAt) === dayKey && formatTime(slot.startAt) === time);
+                      return (
+                        <div key={`${dayKey}-${time}`} className="space-y-1.5 border-b border-r border-gray-200 p-1.5 last:border-r-0">
+                          {slots.map((slot) => (
+                            <button key={slot._id} type="button" onClick={() => setSelectedSlotId(slot._id)} className={`w-full rounded-md border p-2 text-left transition-shadow hover:shadow-md ${getSlotTone(slot)} ${selectedSlotId === slot._id ? 'ring-2 ring-[#173F35]/30' : ''}`}>
+                              <span className="flex items-center justify-between gap-1 text-[10px] font-bold">
+                                <span className="truncate">{slot.trip?.id || 'Store slot'}</span>
+                                <span className="shrink-0 rounded bg-white/80 px-1.5 py-0.5 text-[9px] font-semibold">{slot.status}</span>
+                              </span>
+                              <span className="mt-1 block truncate text-[10px] text-gray-700">{slot.trip?.route || getOperationLabel(slot.operationType)}</span>
+                              <span className="mt-0.5 block text-[9px] opacity-75">{formatTime(slot.startAt)}–{formatTime(slot.endAt)} · {slot.vehicle || 'Vehicle unassigned'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {!filteredSlots.length && <div className="p-10 text-center text-sm text-gray-500">No reservations match this period and filter.</div>}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-gray-100 bg-gray-50/60 px-4 py-3 text-[10px] font-semibold text-gray-500">
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm border border-[#D0E2F8] bg-[#F0F7FF]" /> Outbound / Loading</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm border border-[#A7F3D0] bg-[#ECFDF5]" /> Inbound / Unloading</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm border border-[#FED7AA] bg-[#FFF7ED]" /> Maintenance</span>
+          </div>
+        </section>
+
+        <aside className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-100 bg-[#FAFBFC] px-5 py-4">
+            <h2 className="font-bold text-gray-900">Reservation Details</h2>
+            <p className="mt-1 text-xs text-gray-500">Select a calendar slot to see its trip information.</p>
+          </div>
+          {selectedSlot ? (
+            <>
+              <div className="space-y-5 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Trip</p>
+                    <h3 className="mt-1 text-lg font-bold text-[#173F35]">{selectedSlot.trip?.id || 'Reservation'}</h3>
+                  </div>
+                  <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-700">{selectedSlot.status}</span>
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-gray-100 bg-gray-50/70 p-3.5 text-xs">
+                  <DetailRow icon={<Calendar size={15} />} label="Date" value={formatDate(selectedSlot.startAt, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} />
+                  <DetailRow icon={<Clock size={15} />} label="Time" value={`${formatTime(selectedSlot.startAt)} – ${formatTime(selectedSlot.endAt)}`} />
+                  <DetailRow icon={<Activity size={15} />} label="Operation" value={getOperationLabel(selectedSlot.operationType)} />
+                  <DetailRow icon={<Truck size={15} />} label="Vehicle" value={selectedSlot.vehicle || 'Not assigned'} />
+                  <DetailRow icon={<MapPin size={15} />} label="Store" value={selectedSlot.store?.name || storeName} />
+                </div>
+
+                <div className="rounded-lg border border-gray-100 p-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Planned Route</p>
+                  <p className="mt-1.5 text-sm font-semibold text-gray-800">{selectedSlot.trip?.route || 'Route details are not available.'}</p>
+                  {selectedSlot.trip?.status && <p className="mt-1 text-[11px] text-gray-500">Trip status: {selectedSlot.trip.status}</p>}
+                </div>
+
+                {selectedSlot.notes && (
+                  <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
+                    <p className="mb-1 flex items-center gap-1 font-bold"><Info size={14} /> Instructions</p>
+                    <p className="leading-relaxed">{selectedSlot.notes}</p>
+                  </div>
+                )}
+
+                <button type="button" onClick={() => navigate('/store/trip-progress')} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#173F35] py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0F2C25]">
+                  <Activity size={16} /> View Trip Progress
+                </button>
                 <div className="flex gap-2">
-                  <select className="border border-gray-300 rounded-lg text-xs font-medium px-2 py-1.5 bg-white outline-none cursor-pointer text-gray-600"><option>Colombo Store</option></select>
-                  <select className="border border-gray-300 rounded-lg text-xs font-medium px-2 py-1.5 bg-white outline-none cursor-pointer text-gray-600"><option>All Slots</option></select>
-                  <select className="border border-gray-300 rounded-lg text-xs font-medium px-2 py-1.5 bg-white outline-none cursor-pointer text-gray-600"><option>All Bays</option></select>
-                </div>
-             </div>
-             <div className="flex bg-gray-200/70 p-1 rounded-lg">
-               <button className="px-4 py-1 bg-white shadow-sm rounded-md text-xs font-bold text-gray-800">Week</button>
-               <button className="px-4 py-1 text-xs font-bold text-gray-500 hover:text-gray-800">Day</button>
-             </div>
-           </div>
-
-           <div className="grid grid-cols-[70px_repeat(5,1fr)] border-b border-gray-200 bg-[#FAFBFC] text-xs font-bold text-gray-700 text-center">
-              <div className="py-3 border-r border-gray-200 text-gray-400 font-medium">TIME</div>
-              <div className="py-3 border-r border-gray-200">Mon 09<br/><span className="text-[10px] text-gray-400 font-medium mt-0.5 block">3 slots booked</span></div>
-              <div className="py-3 border-r border-gray-200">Tue 10<br/><span className="text-[10px] text-gray-400 font-medium mt-0.5 block">2 slots booked</span></div>
-              <div className="py-3 border-r border-gray-200">Wed 11<br/><span className="text-[10px] text-gray-400 font-medium mt-0.5 block">4 slots booked</span></div>
-              <div className="py-3 border-r border-gray-200 bg-blue-50/40 text-blue-900">Thu 12 <span className="text-[9px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded ml-1">+</span><br/><span className="text-[10px] text-blue-500 font-medium mt-0.5 block">Today • 3 slots</span></div>
-              <div className="py-3">Fri 13<br/><span className="text-[10px] text-gray-400 font-medium mt-0.5 block">-</span></div>
-           </div>
-
-           <div className="grid grid-cols-[70px_repeat(5,1fr)] text-xs relative">
-              <div className="border-b border-r border-gray-200 p-2 text-gray-500 font-medium text-right bg-gray-50/30">08:00<br/><span className="text-[10px] text-gray-400 font-normal">|</span></div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0830 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 01</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">From Kandy</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Inbound x Bay 01</p>
+                  <button type="button" disabled={['Cancelled', 'Completed'].includes(selectedSlot.status) || processing} onClick={() => { setNewStartAt(toDateTimeLocal(selectedSlot.startAt)); setNewEndAt(toDateTimeLocal(selectedSlot.endAt)); setShowReschedule(true); }} className="flex-1 rounded-lg border border-gray-300 bg-white py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Reschedule</button>
+                  <button type="button" disabled={['Cancelled', 'Completed'].includes(selectedSlot.status) || processing} onClick={() => setShowCancel(true)} className="flex-1 rounded-lg border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Cancel Slot</button>
                 </div>
               </div>
-              <div className="border-b border-r border-gray-200 p-1.5"></div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0835 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 02</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">From Kandy</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Inbound x Bay 02</p>
-                </div>
+              <div className="mt-auto border-t border-gray-100 bg-gray-50/60 px-5 py-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">This week at {storeName}</p>
+                <div className="flex items-center justify-between text-xs text-gray-600"><span>Active reservations</span><span className="font-bold text-[#047857]">{activeCount}</span></div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200"><div className="h-full rounded-full bg-[#15803D]" style={{ width: `${scheduleData.length ? Math.min((activeCount / scheduleData.length) * 100, 100) : 0}%` }} /></div>
               </div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0839 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 01</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">To Jaffna</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Outbound x Bay 01</p>
-                </div>
-              </div>
-              <div className="border-b border-gray-200 p-1.5"></div>
-
-              <div className="border-b border-r border-gray-200 p-2 text-gray-500 font-medium text-right bg-gray-50/30">09:30<br/><span className="text-[10px] text-gray-400 font-normal">|</span></div>
-              <div className="border-b border-r border-gray-200 p-1.5"></div>
-              <div className="border-b border-r border-gray-200 p-1.5"></div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                 <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0834 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 01</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">To Kandy</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Outbound x Bay 01</p>
-                </div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                 <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0843 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 03</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">From Neg...</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Inbound x Bay 03</p>
-                </div>
-              </div>
-              <div className="border-b border-gray-200 p-1.5"></div>
-
-              <div className="border-b border-r border-gray-200 p-2 text-[#E11D48] font-bold text-right bg-[#FFF1F2] flex flex-col justify-center items-end">
-                <span>11:00</span>
-                <span className="text-[10px] font-medium opacity-80">|</span>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0832 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 02</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">To Galle</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Outbound x Bay 02</p>
-                </div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0837 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 01</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">To Negombo</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Outbound x Bay 01</p>
-                </div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                 <div className="bg-[#ECFDF5] border border-[#A7F3D0] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#047857] text-[11px] flex justify-between">BK-0841 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#047857]">Bay 02</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">From Kandy</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Inbound x Bay 02</p>
-                </div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5"></div>
-              <div className="border-b border-gray-200 p-1.5"></div>
-
-              <div className="absolute top-[80px] left-0 w-[14px] h-[2px] bg-[#E11D48] z-10">
-                <div className="w-1.5 h-1.5 bg-[#E11D48] rounded-full absolute -left-0.5 -top-[2px]"></div>
-              </div>
-
-              <div className="border-b border-r border-gray-200 p-2 text-gray-500 font-medium text-right bg-gray-50/30">12:30<br/><span className="text-[10px] text-gray-400 font-normal">|</span></div>
-              <div className="border-b border-r border-gray-200 p-1.5"></div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0836 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 01</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">From Galle</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Inbound x Bay 01</p>
-                </div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5"></div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0842 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 01</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">To Galle</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Outbound x Bay 01</p>
-                </div>
-              </div>
-              <div className="border-b border-gray-200 p-1.5"></div>
-
-              <div className="border-b border-r border-gray-200 p-2 text-gray-500 font-medium text-right bg-gray-50/30">14:30<br/><span className="text-[10px] text-gray-400 font-normal">|</span></div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0833 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 02</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">From Neg...</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Inbound x Bay 02</p>
-                </div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                 <div className="border border-dashed border-gray-300 w-full h-full rounded-md flex items-center justify-center text-[10px] text-gray-400 cursor-pointer hover:bg-gray-50">+ Available</div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5">
-                <div className="bg-[#F0F7FF] border border-[#D0E2F8] rounded-md p-2 h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <p className="font-bold text-[#1D4ED8] text-[11px] flex justify-between">BK-0838 <span className="text-[9px] bg-white/80 px-1.5 py-0.5 rounded text-[#1D4ED8]">Bay 01</span></p>
-                  <p className="text-[10px] text-gray-700 mt-1.5 font-medium">From Galle</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Inbound x Bay 01</p>
-                </div>
-              </div>
-              <div className="border-b border-r border-gray-200 p-1.5"></div>
-              <div className="border-b border-gray-200 p-1.5"></div>
-           </div>
-
-           <div className="p-3 bg-[#FAFBFC] flex justify-between items-center text-[10px] text-gray-600 font-medium">
-              <div className="flex gap-5 items-center">
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-[#15803D] rounded-sm"></div> Inbound Delivery</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-[#1D4ED8] rounded-sm"></div> Outbound Pickup</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-gray-300 rounded-sm"></div> Open Window</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-[#E11D48] rounded-sm"></div> Active Inspector</div>
-              </div>
-              <p className="text-gray-400">Store hours 08:00 - 17:00 • 90-minute booking windows</p>
-           </div>
-        </div>
-
-        {/* Right Side Panel - Booking Details */}
-        <div className="w-[320px] bg-white rounded-xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-gray-200 p-5 flex flex-col shrink-0">
-           
-           <div className="border-b border-gray-100 pb-4">
-             <div className="flex justify-between items-center mb-1.5">
-               <h3 className="font-bold text-gray-800 text-lg">BK-0841</h3>
-               <span className="text-[10px] bg-[#ECFDF5] text-[#047857] border border-[#A7F3D0] px-2.5 py-1 rounded-md font-bold">In Transit</span>
-             </div>
-             <p className="text-[11px] text-gray-500 font-medium">Thursday, 12 Nov 2026</p>
-           </div>
-
-           <div className="py-4 border-b border-gray-100">
-             <p className="text-sm font-bold text-gray-800 mb-1">10:00 - 12:30</p>
-             <p className="text-xs text-gray-500 font-medium">Mount Lavinia • Bay 02 • 90 min</p>
-           </div>
-
-           <div className="py-4 border-b border-gray-100">
-             <p className="text-[10px] font-bold text-gray-400 mb-4 tracking-wider">ROUTE TIMELINE</p>
-             <div className="text-sm text-gray-700 space-y-4 relative before:absolute before:left-[5px] before:top-1.5 before:bottom-1.5 before:w-0.5 before:bg-gray-200">
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className="w-3 h-3 bg-gray-300 rounded-full border-2 border-white ring-2 ring-white"></div> 
-                  <span className="font-medium">Origin: Kandy Depot</span>
-                </div>
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full border-2 border-white ring-2 ring-white"></div> 
-                  <span className="font-medium">Checkpoint #2: Nittambuwa</span>
-                </div>
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white ring-2 ring-white"></div> 
-                  <span className="font-medium text-green-700">Destination: Colombo Central</span>
-                </div>
-             </div>
-           </div>
-
-           <div className="text-[11px] space-y-2.5 border-b border-gray-100 py-4">
-             <div className="flex justify-between"><span className="text-gray-400 font-medium">Vehicle</span> <span className="font-semibold text-gray-800">WP LH-4521 (Isuzu ELF)</span></div>
-             <div className="flex justify-between"><span className="text-gray-400 font-medium">Assigned Driver</span> <span className="font-semibold text-gray-800">Nimal Perera</span></div>
-             <div className="flex justify-between"><span className="text-gray-400 font-medium">Driver Phone</span> <span className="font-semibold text-gray-800">+94 77 234 5678</span></div>
-             <div className="flex justify-between"><span className="text-gray-400 font-medium">Cargo/Manifest</span> <span className="font-semibold text-gray-800">Tea & Spices • 1,850 kg</span></div>
-           </div>
-
-           <div className="bg-[#F0F9FF] p-3 rounded-lg border border-[#BAE6FD] text-[11px] text-[#0369A1] my-4">
-             <p className="font-bold mb-1 flex items-center gap-1"><Info size={14}/> Depot Instructions</p>
-             <p className="leading-relaxed opacity-90">Keep Bay 02 clear 10 mins prior. Requires electric forklift with clamp attachment.</p>
-           </div>
-
-           {/* ACTION BUTTONS */}
-           <div className="space-y-2 mt-auto">
-             <button 
-               onClick={handleViewProgress}
-               className="w-full py-2.5 bg-[#173F35] text-white rounded-lg text-sm font-semibold hover:bg-[#0F2C25] transition-colors flex items-center justify-center gap-2 shadow-sm"
-             >
-               <Activity size={16}/> View Trip Progress
-             </button>
-             <div className="flex gap-2">
-               <button 
-                 onClick={() => setIsRescheduleOpen(true)} 
-                 className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-50 bg-white transition-colors"
-               >
-                 Reschedule
-               </button>
-               <button 
-                 onClick={() => setIsCancelOpen(true)} 
-                 className="flex-1 py-2 border border-gray-300 text-[#E11D48] rounded-lg text-xs font-semibold hover:bg-[#FFF1F2] transition-colors"
-               >
-                 Cancel Slot
-               </button>
-             </div>
-           </div>
-
-           <div className="border-t border-gray-100 pt-4 mt-5">
-             <div className="flex justify-between items-end mb-3">
-               <p className="text-[10px] font-bold text-gray-500 tracking-wider">BAY LOAD (COLOMBO)</p>
-               <span className="text-[10px] font-bold text-[#047857] bg-green-50 px-1.5 py-0.5 rounded">75% Utilized</span>
-             </div>
-             
-             <div className="space-y-3">
-               <div>
-                 <div className="flex justify-between text-[10px] font-medium text-gray-700 mb-1"><span>Bay 01 (Outbound)</span> <span className="text-gray-400">7/8 booked</span></div>
-                 <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#15803D] rounded-full w-[85%]"></div></div>
-               </div>
-               <div>
-                 <div className="flex justify-between text-[10px] font-medium text-gray-700 mb-1"><span>Bay 02 (Inbound)</span> <span className="text-gray-400">7/8 booked</span></div>
-                 <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#10B981] rounded-full w-[75%]"></div></div>
-               </div>
-             </div>
-           </div>
-
-        </div>
+            </>
+          ) : (
+            <div className="flex min-h-72 flex-col items-center justify-center p-6 text-center text-gray-400">
+              <Calendar size={30} className="mb-3 opacity-50" />
+              <p className="text-sm font-semibold text-gray-600">No reservation selected</p>
+              <p className="mt-1 text-xs">Choose a slot in the calendar to view details.</p>
+            </div>
+          )}
+        </aside>
       </div>
 
-      {/* ================= MODALS ================= */}
-
-      {/* 1. Reschedule Modal */}
-      {isRescheduleOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-2xl w-[400px] overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
-              <h3 className="font-bold text-gray-800">Reschedule Booking</h3>
-              <button onClick={() => setIsRescheduleOpen(false)} className="text-gray-400 hover:text-gray-700"><X size={20}/></button>
+      {showReschedule && selectedSlot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <form onSubmit={handleReschedule} className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 p-4">
+              <h3 className="font-bold text-gray-800">Reschedule reservation</h3>
+              <button type="button" onClick={() => setShowReschedule(false)} className="text-gray-400 hover:text-gray-700" aria-label="Close"><X size={20} /></button>
             </div>
-            <form onSubmit={handleRescheduleConfirm}>
-              <div className="p-5 space-y-4">
-                <p className="text-sm text-gray-500">Select a new date and time for <strong className="text-gray-800">BK-0841</strong>.</p>
-                <div>
-                  <label className="text-xs font-bold text-gray-600 mb-1 block">New Date</label>
-                  <input type="date" className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" defaultValue="2026-11-13" required />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-600 mb-1 block">New Time Slot</label>
-                  <select className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-white">
-                    <option>08:00 - 09:30</option>
-                    <option>09:30 - 11:00</option>
-                    <option>11:00 - 12:30</option>
-                    <option>14:30 - 16:00</option>
-                  </select>
-                </div>
-              </div>
-              <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
-                <button type="button" onClick={() => setIsRescheduleOpen(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800">Cancel</button>
-                <button type="submit" disabled={isProcessing} className="px-4 py-2 text-sm font-bold text-white bg-[#173F35] rounded-lg hover:bg-[#0F2C25] flex items-center gap-2">
-                  {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Confirm Reschedule'}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="space-y-4 p-5">
+              <p className="text-sm text-gray-500">Choose a new time for <strong>{selectedSlot.trip?.id || 'this reservation'}</strong>. Store hours, capacity and overlapping slots will be checked by the server.</p>
+              <label className="block text-xs font-bold text-gray-600">New start<input required type="datetime-local" value={newStartAt} onChange={(event) => setNewStartAt(event.target.value)} className="mt-1.5 w-full rounded-lg border border-gray-300 p-2.5 text-sm font-normal" /></label>
+              <label className="block text-xs font-bold text-gray-600">New end<input required type="datetime-local" value={newEndAt} onChange={(event) => setNewEndAt(event.target.value)} className="mt-1.5 w-full rounded-lg border border-gray-300 p-2.5 text-sm font-normal" /></label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 p-4">
+              <button type="button" disabled={processing} onClick={() => setShowReschedule(false)} className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100">Cancel</button>
+              <button type="submit" disabled={processing} className="flex items-center gap-2 rounded-lg bg-[#173F35] px-4 py-2 text-sm font-bold text-white hover:bg-[#0F2C25] disabled:opacity-60">{processing && <Loader2 size={15} className="animate-spin" />}{processing ? 'Saving…' : 'Confirm Reschedule'}</button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* 2. Cancel Slot Modal */}
-      {isCancelOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-2xl w-[400px] overflow-hidden">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle size={32} />
-              </div>
-              <h3 className="text-lg font-bold text-gray-800 mb-2">Cancel Slot?</h3>
-              <p className="text-sm text-gray-500 mb-6">Are you sure you want to cancel <strong className="text-gray-800">BK-0841</strong>? This action cannot be undone and will free up the bay for other carriers.</p>
-              
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setIsCancelOpen(false)} 
-                  className="flex-1 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-lg text-sm hover:bg-gray-50"
-                >
-                  No, Keep it
-                </button>
-                <button 
-                  onClick={handleCancelConfirm} 
-                  disabled={isProcessing}
-                  className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-lg text-sm hover:bg-red-700 flex items-center justify-center gap-2"
-                >
-                  {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Yes, Cancel Slot'}
-                </button>
-              </div>
+      {showCancel && selectedSlot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600"><AlertCircle size={28} /></div>
+            <h3 className="text-lg font-bold text-gray-800">Cancel this reservation?</h3>
+            <p className="my-3 text-sm text-gray-500">This will cancel the reservation for <strong>{selectedSlot.trip?.id || 'this trip'}</strong> and release its time slot.</p>
+            <div className="mt-5 flex gap-3">
+              <button type="button" disabled={processing} onClick={() => setShowCancel(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Keep reservation</button>
+              <button type="button" disabled={processing} onClick={() => void handleCancel()} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">{processing && <Loader2 size={15} className="animate-spin" />}{processing ? 'Cancelling…' : 'Cancel Slot'}</button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };
+
+const KpiCard = ({ label, value, note, icon, tone }) => {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600',
+    green: 'bg-green-50 text-green-700',
+    emerald: 'bg-emerald-50 text-emerald-700',
+    amber: 'bg-amber-50 text-amber-600',
+  };
+  return (
+    <div className="flex items-start justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div>
+        <p className="text-[10px] font-bold tracking-wide text-gray-500">{label}</p>
+        <p className="mt-1 text-3xl font-bold text-gray-800">{value}</p>
+        <p className="mt-1 text-[10px] font-medium text-gray-400">{note}</p>
+      </div>
+      <div className={`flex h-8 w-8 items-center justify-center rounded-full ${tones[tone]}`}>{icon}</div>
+    </div>
+  );
+};
+
+const DetailRow = ({ icon, label, value }) => (
+  <div className="flex items-center justify-between gap-3">
+    <span className="flex shrink-0 items-center gap-2 text-gray-500">{icon}{label}</span>
+    <span className="text-right font-semibold text-gray-800">{value}</span>
+  </div>
+);
 
 export default StoreSchedule;

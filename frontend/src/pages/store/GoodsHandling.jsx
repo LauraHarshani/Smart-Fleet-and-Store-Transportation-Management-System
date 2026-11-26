@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import api from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   Layers,
   ArrowUp,
@@ -12,233 +14,28 @@ import {
   Package,
 } from "lucide-react";
 
-const CURRENT_STORE = "Colombo Store";
-
-const initialBookings = [
-  {
-    id: "BK-256",
-    origin: "Colombo Store",
-    destination: "Kandy Store",
-    route: "Colombo → Kandy",
-    itemCount: 3,
-    scheduledPickup: "06 Nov 2026",
-    pickupTime: "10:00 AM",
-    direction: "sending",
-    status: "Awaiting Preparation",
-    vehicle: "VH-020",
-    driver: "Minindu Rajapaksha",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 10, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-258",
-    origin: "Colombo Store",
-    destination: "Kandy Store",
-    route: "Colombo → Kandy",
-    itemCount: 3,
-    scheduledPickup: "06 Nov 2026",
-    pickupTime: "03:00 PM",
-    direction: "sending",
-    status: "Awaiting Handover",
-    vehicle: "VH-021",
-    driver: "Kasun Perera",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 15 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 12 },
-    ],
-  },
-  {
-    id: "BK-259",
-    origin: "Galle Store",
-    destination: "Colombo Store",
-    route: "Galle → Colombo",
-    itemCount: 3,
-    scheduledPickup: "08 Nov 2026",
-    pickupTime: "11:00 AM",
-    direction: "receiving",
-    status: "In Transit",
-    vehicle: "VH-022",
-    driver: "Nimal Fernando",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 12 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 25 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 18 },
-    ],
-  },
-  {
-    id: "BK-265",
-    origin: "Colombo Store",
-    destination: "Galle Store",
-    route: "Colombo → Galle",
-    itemCount: 3,
-    scheduledPickup: "09 Nov 2026",
-    pickupTime: "02:00 PM",
-    direction: "sending",
-    status: "Awaiting Handover",
-    vehicle: "VH-023",
-    driver: "Amila Silva",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 20 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 30 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 25 },
-    ],
-  },
-  {
-    id: "BK-285",
-    origin: "Kandy Store",
-    destination: "Colombo Store",
-    route: "Kandy → Colombo",
-    itemCount: 3,
-    scheduledPickup: "10 Nov 2026",
-    pickupTime: "08:00 AM",
-    direction: "receiving",
-    status: "Completed",
-    vehicle: "VH-024",
-    driver: "Ruwan Jayasinghe",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-286",
-    origin: "Galle Store",
-    destination: "Colombo Store",
-    route: "Galle → Colombo",
-    itemCount: 3,
-    scheduledPickup: "10 Nov 2026",
-    pickupTime: "08:00 AM",
-    direction: "receiving",
-    status: "Awaiting Confirmation",
-    vehicle: "VH-025",
-    driver: "Dilan Perera",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-287",
-    origin: "Colombo Store",
-    destination: "Kandy Store",
-    route: "Colombo → Kandy",
-    itemCount: 3,
-    scheduledPickup: "10 Nov 2026",
-    pickupTime: "08:00 AM",
-    direction: "sending",
-    status: "Awaiting Receipt",
-    vehicle: "VH-026",
-    driver: "Sahan Perera",
-    itemDetails: [
-      { id: 1, name: "Ceylon Tea", inventory: 80, requested: 10 },
-      { id: 2, name: "Rice Bags", inventory: 50, requested: 20 },
-      { id: 3, name: "Sugar", inventory: 60, requested: 15 },
-    ],
-  },
-  {
-    id: "BK-288",
-    origin: "Kandy Store",
-    destination: "Colombo Store",
-    route: "Kandy → Colombo",
-    itemCount: 3,
-    scheduledPickup: "15 Nov 2026",
-    pickupTime: "09:00 AM",
-    direction: "receiving",
-    status: "Awaiting Dispatch",
-    vehicle: "VH-027",
-    driver: "Kasun Perera",
-    itemDetails: [
-      { id: 1, name: "Rice 5kg", inventory: 20, requested: 20 },
-      { id: 2, name: "Cooking Oil 1L", inventory: 15, requested: 15 },
-      { id: 3, name: "Sugar 1kg", inventory: 25, requested: 25 },
-    ],
-  }
-];
-
-// Derive the direction from the route if it is not already present.
-const getDirection = (booking) => {
-  if (booking.origin === CURRENT_STORE) return "sending";
-  if (booking.destination === CURRENT_STORE) return "receiving";
-  return booking.direction || "sending";
-};
-
-// Convert older demo statuses to the new workflow.
-const migrateBooking = (booking) => {
-  const direction = getDirection(booking);
-  let status = booking.status;
-
-  if (direction === "sending") {
-    const statusMap = {
-      Prepared: "Awaiting Handover",
-      "Handed Over": "Awaiting Receipt",
-      "In Transit": "Awaiting Receipt",
-    };
-
-    status = statusMap[status] || status;
-  } else {
-    const statusMap = {
-      "Awaiting Preparation": "Awaiting Dispatch",
-      Prepared: "Awaiting Dispatch",
-      "Awaiting Handover": "Awaiting Dispatch",
-      "Handed Over": "In Transit",
-      "Awaiting Receipt": "Awaiting Confirmation",
-    };
-
-    status = statusMap[status] || status;
-  }
-
-  return {
-    ...booking,
-    direction,
-    route:
-      direction === "sending"
-        ? `${booking.origin.replace(" Store", "")} → ${booking.destination.replace(" Store", "")}`
-        : `${booking.origin.replace(" Store", "")} → ${booking.destination.replace(" Store", "")}`,
-    status,
-  };
-};
-
-const getInitialBookings = () => {
-  try {
-    const saved = localStorage.getItem("goodsBookings");
-    const source = saved ? JSON.parse(saved) : initialBookings;
-    const migrated = source.map(migrateBooking);
-
-    localStorage.setItem("goodsBookings", JSON.stringify(migrated));
-    return migrated;
-  } catch (error) {
-    console.error("Unable to load goods bookings:", error);
-    return initialBookings.map(migrateBooking);
-  }
-};
-
 const sendingStatuses = [
   "Awaiting Preparation",
+  "Prepared",
+  "In Transit",
   "Awaiting Handover",
-  "Awaiting Receipt",
-  "Completed",
+  "Handed Over",
 ];
 
 const receivingStatuses = [
-  "Awaiting Dispatch",
-  "In Transit",
-  "Awaiting Confirmation",
+  "Awaiting Receipt",
+  "Received",
   "Completed",
 ];
 
 const statusStyles = {
   "Awaiting Preparation": "bg-[#FFF4D6] text-[#925C00]",
+  Prepared: "bg-[#DCFCE7] text-[#15803D]",
   "Awaiting Handover": "bg-[#FFE8D5] text-[#A4490B]",
-  "Awaiting Receipt": "bg-[#DBEAFE] text-[#1D4ED8]",
-  "Awaiting Dispatch": "bg-[#F3E8FF] text-[#7E22CE]",
   "In Transit": "bg-[#CFFAFE] text-[#0E7490]",
-  "Awaiting Confirmation": "bg-[#FCE7F3] text-[#BE185D]",
+  "Handed Over": "bg-[#DBEAFE] text-[#1D4ED8]",
+  "Awaiting Receipt": "bg-[#FCE7F3] text-[#BE185D]",
+  Received: "bg-[#DCFCE7] text-[#15803D]",
   Completed: "bg-[#DCFCE7] text-[#15803D]",
 };
 
@@ -251,9 +48,13 @@ const tabs = [
 
 const GoodsHandling = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
 
-  const [bookings, setBookings] = useState(getInitialBookings);
-  const [activeTab, setActiveTab] = useState("all");
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [activeTab, setActiveTab] = useState(location.state?.activeTab || "all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All Statuses");
   const [selectedRoute, setSelectedRoute] = useState("All Routes");
@@ -263,18 +64,72 @@ const GoodsHandling = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const bookingsPerPage = 8;
 
+  useEffect(() => {
+    let active = true;
+    api.get("/store-bookings")
+      .then(({ data }) => {
+        if (!active) return;
+        const storeId = String(user?.storeId || user?.store?._id || user?.store || "");
+        const records = (data.bookings || []).map((record) => {
+          const origin = record.pickupStore?.name || "Pickup store";
+          const destination = record.destinationStore?.name || "Destination store";
+          const direction = String(record.pickupStore?._id || record.pickupStore) === storeId ? "sending" : "receiving";
+          const dropStop = record.stops?.find((stop) => stop.stopType === "DROP");
+          const hasHandover = record.items?.some((line) => line.handedOverQuantity !== null && line.handedOverQuantity !== undefined);
+          const hasReceived = record.items?.length > 0 && record.items.every((line) => line.receivedQuantity !== null && line.receivedQuantity !== undefined);
+          const workflowStatus = record.status === "Completed"
+            ? (direction === "sending" ? "Handed Over" : "Completed")
+            : record.status === "In Progress"
+              ? (direction === "sending"
+                ? (dropStop?.status === "Completed" ? "Handed Over" : dropStop?.status === "Arrived" ? "Awaiting Handover" : hasHandover ? "In Transit" : "Prepared")
+                : (hasReceived ? "Received" : "Awaiting Receipt"))
+              : record.status === "Approved"
+                ? (direction === "sending" ? "Awaiting Preparation" : "Awaiting Receipt")
+                : record.status === "Rejected" || record.status === "Cancelled" ? record.status
+                  : direction === "sending" ? "Awaiting Preparation" : "Awaiting Receipt";
+          const date = record.requestedPickupDate ? new Date(record.requestedPickupDate) : null;
+          return {
+            ...record,
+            id: record._id,
+            backendStatus: record.status,
+            displayId: record.bookingCode || record._id,
+            origin, destination,
+            route: `${origin.replace(/ Store$/i, "")} → ${destination.replace(/ Store$/i, "")}`,
+            direction,
+            status: workflowStatus,
+            itemCount: record.items?.length || 0,
+            scheduledPickup: date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—",
+            pickupTime: record.requestedTimeWindow?.startTime || "",
+            itemDetails: (record.items || []).map((line) => ({
+              id: line._id, lineId: line._id, item: line.item?._id || line.item,
+              name: line.item?.name || "Item", requested: line.quantity,
+              prepared: line.handedOverQuantity, received: line.receivedQuantity,
+              handedOver: line.handedOverQuantity,
+            })),
+          };
+        });
+        setBookings(records);
+        setLoadError("");
+      })
+      .catch((error) => {
+        if (active) setLoadError(error.response?.data?.message || "Unable to load goods handling bookings.");
+      })
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [user?.storeId, user?.store]);
+
   const sendingCount = bookings.filter(
-    (booking) =>
-      booking.direction === "sending" && booking.status !== "Completed"
+      (booking) =>
+      booking.direction === "sending" && booking.backendStatus !== "Completed"
   ).length;
 
   const receivingCount = bookings.filter(
     (booking) =>
-      booking.direction === "receiving" && booking.status !== "Completed"
+      booking.direction === "receiving" && booking.backendStatus !== "Completed"
   ).length;
 
   const completedCount = bookings.filter(
-    (booking) => booking.status === "Completed"
+    (booking) => booking.backendStatus === "Completed"
   ).length;
 
   const routes = useMemo(
@@ -288,13 +143,13 @@ const GoodsHandling = () => {
         activeTab === "all" ||
         (activeTab === "sending" &&
           booking.direction === "sending" &&
-          booking.status !== "Completed") ||
+          booking.backendStatus !== "Completed") ||
         (activeTab === "receiving" &&
           booking.direction === "receiving" &&
-          booking.status !== "Completed") ||
-        (activeTab === "completed" && booking.status === "Completed");
+          booking.backendStatus !== "Completed") ||
+        (activeTab === "completed" && booking.backendStatus === "Completed");
 
-      const matchesSearch = booking.id
+      const matchesSearch = booking.displayId
         .toLowerCase()
         .includes(searchTerm.toLowerCase().trim());
 
@@ -331,11 +186,6 @@ const GoodsHandling = () => {
     selectedRoute,
     selectedDate,
   ]);
-
-  // Return to the first page whenever the filters or selected tab change.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchTerm, selectedStatus, selectedRoute, selectedDate]);
 
   // Pagination calculations are based on the filtered results.
   const totalPages = Math.ceil(filteredBookings.length / bookingsPerPage);
@@ -386,6 +236,7 @@ const GoodsHandling = () => {
               onClick={() => {
                 setActiveTab(tab.id);
                 setSelectedStatus("All Statuses");
+                setCurrentPage(1);
               }}
               className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-all ${
                 isActive
@@ -403,6 +254,8 @@ const GoodsHandling = () => {
 
       {/* Table */}
       <div className="min-h-[560px] rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+        {loadError && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</p>}
+        {loading && <p className="mb-4 text-sm text-slate-500">Loading bookings…</p>}
         {/* Filters */}
         <div className="mb-6 flex flex-wrap items-center gap-2.5">
           <div className="relative w-full sm:w-[283px]">
@@ -413,7 +266,7 @@ const GoodsHandling = () => {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               placeholder="Search by booking ID..."
               className="h-10 w-full rounded-lg border border-[#078A68] bg-white pl-11 pr-3 text-sm text-gray-800 outline-none transition placeholder:text-gray-500 focus:ring-2 focus:ring-[#078A68]/15"
             />
@@ -422,7 +275,7 @@ const GoodsHandling = () => {
           <div className="relative w-full sm:w-[190px]">
             <select
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => { setSelectedStatus(e.target.value); setCurrentPage(1); }}
               className="h-10 w-full appearance-none rounded-lg border border-[#078A68] bg-white px-3 pr-8 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#078A68]/15"
             >
               <option value="All Statuses">All Statuses</option>
@@ -441,7 +294,7 @@ const GoodsHandling = () => {
           <div className="relative w-full sm:w-[165px]">
             <select
               value={selectedRoute}
-              onChange={(e) => setSelectedRoute(e.target.value)}
+              onChange={(e) => { setSelectedRoute(e.target.value); setCurrentPage(1); }}
               className="h-10 w-full appearance-none rounded-lg border border-[#078A68] bg-white px-3 pr-8 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#078A68]/15"
             >
               <option value="All Routes">All Routes</option>
@@ -465,7 +318,7 @@ const GoodsHandling = () => {
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => { setSelectedDate(e.target.value); setCurrentPage(1); }}
               className="h-10 w-full rounded-lg border border-[#078A68] bg-white pl-10 pr-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#078A68]/15"
               aria-label="Filter by scheduled pickup date"
             />
@@ -482,6 +335,7 @@ const GoodsHandling = () => {
                 setSelectedStatus("All Statuses");
                 setSelectedRoute("All Routes");
                 setSelectedDate("");
+                setCurrentPage(1);
               }}
               className="h-10 rounded-lg px-3 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
             >
@@ -512,7 +366,7 @@ const GoodsHandling = () => {
                     className="border-b border-slate-200 text-sm transition hover:bg-slate-50/70"
                   >
                     <td className="whitespace-nowrap px-4 py-4 font-semibold text-gray-900">
-                      {booking.id}
+                        {booking.displayId}
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-gray-800">
                       {booking.route}
@@ -538,7 +392,7 @@ const GoodsHandling = () => {
                         type="button"
                         onClick={() => handleViewBooking(booking)}
                         title="View goods confirmation"
-                        aria-label={`View ${booking.id} goods confirmation`}
+                        aria-label={`View ${booking.displayId} goods confirmation`}
                         className="rounded-md p-1.5 text-gray-500 transition hover:bg-emerald-50 hover:text-[#078A68]"
                       >
                         <Eye size={21} strokeWidth={2} />

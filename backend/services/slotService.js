@@ -18,7 +18,8 @@ const createError = (message, statusCode = 400) => {
 };
 
 const assertStoreScope = (slot, storeScope) => {
-  if (storeScope && slot.store.toString() !== storeScope.toString()) {
+  const slotStoreId = slot.store?._id || slot.store;
+  if (storeScope && slotStoreId.toString() !== storeScope.toString()) {
     throw createError("Slot reservation not found.", 404);
   }
 };
@@ -43,9 +44,9 @@ const validateSlotTime = (startAt, endAt) => {
 };
 
 // CREATE SLOT RESERVATION
-const createSlot = async (slotData) => {
+const createSlot = async (slotData = {}, storeScope = null) => {
   const {
-    store,
+    store: requestedStore,
     trip,
     stopId,
     vehicle,
@@ -54,6 +55,7 @@ const createSlot = async (slotData) => {
     endAt,
     notes,
   } = slotData;
+  const store = storeScope || requestedStore;
 
   if (
     !store ||
@@ -133,7 +135,7 @@ const getSlots = async (filters = {}) => {
   }
 
   return await StoreSlot.find(query)
-    .populate("store", "name code")
+    .populate("store", "name code docks")
     .populate("trip", "id route status")
     .sort({ startAt: 1 });
 };
@@ -145,7 +147,7 @@ const getSlotById = async (slotId, storeScope = null) => {
   }
 
   const slot = await StoreSlot.findById(slotId)
-    .populate("store", "name code")
+    .populate("store", "name code docks")
     .populate("trip", "id route status");
 
   if (!slot) {
