@@ -28,6 +28,9 @@ const rescheduleTripSlots = async (tripId, delayMinutes) => {
     await session.withTransaction(async () => {
       const trip = await Trip.findById(tripId).session(session);
       if (!trip) throw createError("Trip not found.", 404);
+      if (["Draft", "Pending", "Cancelled", "Completed"].includes(trip.status)) {
+        throw createError(`A trip in ${trip.status} status cannot be delayed.`, 400);
+      }
 
       const slots = await StoreSlot.find({
         trip: tripId,

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, Download, Plus, Calendar, ChevronRight, Truck, 
-  CheckCircle2, History, Edit2, ArrowLeft, 
+  CheckCircle2, History, Edit2, ArrowLeft,
   MapPin, Clock, Package, Trash2, ShieldAlert, Save, Send 
 } from 'lucide-react';
 
 const API_ROOT = 'http://localhost:5000/api';
 const BOOKINGS_API = `${API_ROOT}/store-bookings`;
+const apiFetch = (url, options = {}) => fetch(url, { ...options, credentials: 'include' });
 
 const isObjectId = (val) => typeof val === 'string' && /^[a-f\d]{24}$/i.test(val.trim());
 
@@ -359,7 +360,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
       const url = editMongoId ? `${BOOKINGS_API}/${editMongoId}` : BOOKINGS_API;
       const method = editMongoId ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
@@ -371,7 +372,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
 
       const savedBooking = data.booking;
       if (submitImmediately && savedBooking?._id && ['Draft', 'Changes Requested'].includes(savedBooking.status)) {
-        const subRes = await fetch(`${BOOKINGS_API}/${savedBooking._id}/submit`, {
+        const subRes = await apiFetch(`${BOOKINGS_API}/${savedBooking._id}/submit`, {
           method: 'PATCH',
           headers: getAuthHeaders(),
           body: JSON.stringify({ updatedBy: actorId, reason: 'Submitted via Store Bookings UI' }),
@@ -771,6 +772,8 @@ const StoreBookings = () => {
   const [storesList, setStoresList] = useState([]);
   const [itemsList, setItemsList] = useState([]);
   const [currentUserId, setCurrentUserId] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [bookingNotice, setBookingNotice] = useState('');
 
   const transformBookingFromApi = (b) => {
     const pickupName = b.pickupStore?.name || '';
@@ -832,11 +835,11 @@ const StoreBookings = () => {
     try {
       const headers = getAuthHeaders();
       const [bookingsRes, storesRes, itemsRes, usersRes, meRes] = await Promise.allSettled([
-        fetch(BOOKINGS_API, { headers }),
-        fetch(`${API_ROOT}/stores`, { headers }),
-        fetch(`${API_ROOT}/items`, { headers }),
-        fetch(`${API_ROOT}/users`, { headers }),
-        fetch(`${API_ROOT}/auth/me`, { headers }),
+        apiFetch(BOOKINGS_API, { headers }),
+        apiFetch(`${API_ROOT}/stores`, { headers }),
+        apiFetch(`${API_ROOT}/items`, { headers }),
+        apiFetch(`${API_ROOT}/users`, { headers }),
+        apiFetch(`${API_ROOT}/auth/me`, { headers }),
       ]);
 
       let fetchedStores = [];
@@ -960,7 +963,7 @@ const StoreBookings = () => {
 
   const canCancelBooking = (booking) => {
     if (!booking) return false;
-    return ['Draft', 'Submitted', 'Changes Requested', 'Approved', 'In Progress'].includes(booking.backendStatus);
+    return ['Draft', 'Submitted', 'Changes Requested', 'Approved'].includes(booking.backendStatus);
   };
 
   const handleEditClick = () => {
@@ -1016,23 +1019,29 @@ const StoreBookings = () => {
   const handleCancelBookingClick = async () => {
     if (!selectedBooking || !selectedBooking.mongoId) return;
     const reason = window.prompt('Enter cancellation reason:', 'Cancelled by store user');
-    if (!reason) return;
+    if (!reason?.trim()) return;
 
+    setIsCancelling(true);
+    setBookingNotice('');
     try {
-      const res = await fetch(`${BOOKINGS_API}/${selectedBooking.mongoId}/cancel`, {
+      const res = await apiFetch(`${BOOKINGS_API}/${selectedBooking.mongoId}/cancel`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ updatedBy: currentUserId, reason }),
+        body: JSON.stringify({ updatedBy: currentUserId, reason: reason.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || 'Failed to cancel booking');
       }
       await fetchAllData();
-      setSelectedBooking(null);
-      alert('Booking cancelled successfully!');
+      const trip = data.trip;
+      setBookingNotice(trip
+        ? `Booking cancelled. Trip ${trip.id || ''} recalculated: ${trip.load || '0 Units'}; ${trip.route || 'no remaining route'}; ${trip.activeReservationsRevalidated || 0} reservations revalidated.`
+        : 'Booking cancelled successfully.');
     } catch (err) {
       alert(err.message || 'Error cancelling booking');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -1082,6 +1091,12 @@ const StoreBookings = () => {
           </button>
         </div>
       </div>
+
+      {bookingNotice && (
+        <div role="status" className="mx-6 mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {bookingNotice}
+        </div>
+      )}
 
       <div className="flex px-6 pb-6 gap-6 items-start"> 
         
@@ -1383,16 +1398,16 @@ const StoreBookings = () => {
                {/* 2. Cancel Button */}
                <button 
                   onClick={handleCancelBookingClick}
-                  disabled={!canCancelBooking(selectedBooking)} 
-                  className={`px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${canCancelBooking(selectedBooking) ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'}`}
+                  disabled={!canCancelBooking(selectedBooking) || isCancelling}
+                  className={`px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${canCancelBooking(selectedBooking) && !isCancelling ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'}`}
                >
-                  Cancel Booking
+                  {isCancelling ? 'Cancelling…' : 'Cancel Booking'}
                </button>
                
                {/* 3. Edit Button */}
                <button 
                   onClick={handleEditClick}
-                  disabled={!canEditBooking(selectedBooking)} 
+                  disabled={!canEditBooking(selectedBooking)}
                   className={`px-6 py-2.5 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm ${canEditBooking(selectedBooking) ? 'bg-[#0f3c2c] text-white hover:bg-[#0a2e21]' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                >
                   <Edit2 size={16} /> Edit Booking

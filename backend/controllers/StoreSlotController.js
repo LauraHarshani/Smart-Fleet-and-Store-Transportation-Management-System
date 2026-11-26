@@ -23,7 +23,9 @@ const createSlot = async (req, res) => {
 // GET ALL SLOT RESERVATIONS
 const getSlots = async (req, res) => {
   try {
-    const slots = await slotService.getSlots(req.query);
+    const filters = { ...req.query };
+    if (req.storeScope) filters.store = req.storeScope;
+    const slots = await slotService.getSlots(filters);
 
     return res.status(200).json({
       success: true,
@@ -43,7 +45,7 @@ const getSlots = async (req, res) => {
 // GET ONE SLOT RESERVATION
 const getSlotById = async (req, res) => {
   try {
-    const slot = await slotService.getSlotById(req.params.id);
+    const slot = await slotService.getSlotById(req.params.id, req.storeScope);
 
     return res.status(200).json({
       success: true,
@@ -64,7 +66,8 @@ const updateSlot = async (req, res) => {
   try {
     const slot = await slotService.updateSlot(
       req.params.id,
-      req.body
+      req.body,
+      req.storeScope
     );
 
     return res.status(200).json({
@@ -85,7 +88,7 @@ const updateSlot = async (req, res) => {
 // CANCEL SLOT RESERVATION
 const cancelSlot = async (req, res) => {
   try {
-    const slot = await slotService.cancelSlot(req.params.id);
+    const slot = await slotService.cancelSlot(req.params.id, req.storeScope);
 
     return res.status(200).json({
       success: true,
