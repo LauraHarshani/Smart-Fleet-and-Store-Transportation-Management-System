@@ -45,6 +45,7 @@ const timeToPercent = (time) => {
 
 const StoreTimeline = ({
   slots,
+  stores = [],
   selectedSlotId,
   onSelectSlot,
   storeFilter,
@@ -59,7 +60,8 @@ const StoreTimeline = ({
     "Maintenance",
   ];
 
-  const storeOrder = STORES.slice(1);
+  const storeOrder = stores.length ? stores : STORES.slice(1);
+  const storeOptions = ["All Stores", ...storeOrder];
 
   const visibleStores = storeOrder.filter((store) =>
     slots.some((slot) => slot.store === store)
@@ -76,7 +78,7 @@ const StoreTimeline = ({
               onChange={(event) => setStoreFilter(event.target.value)}
               className="h-10 min-w-[140px] appearance-none rounded-xl border border-[#27866A] bg-white py-2 pl-4 pr-9 text-sm text-gray-600 outline-none focus:ring-2 focus:ring-[#B5D6A7]"
             >
-              {STORES.map((store) => (
+              {storeOptions.map((store) => (
                 <option key={store} value={store}>
                   {store}
                 </option>

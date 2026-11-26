@@ -1,70 +1,266 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Truck, Mail, Lock, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
+import loginImage from '../assets/login.jpeg';
 import { useAuth } from '../contexts/AuthContext';
 
-const Login = () => {
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
     try {
-      const user = await login({ email: email.trim(), password });
+      const user = await login({ email: email.trim(), password, rememberMe });
       if (user.role === 'System Administrator') navigate('/dashboard', { replace: true });
       else if (['Store Manager', 'Store Employee'].includes(user.role)) navigate('/store', { replace: true });
-      else setError('This account does not have access to the admin or store portal.');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Unable to connect to the server. Please try again.');
+      else setLoginError('This account does not have access to the admin or store portal.');
+    } catch (error) {
+      setLoginError(error.response?.data?.message || 'Unable to connect to the server. Please try again.');
     } finally {
-      setLoading(false);
+      setIsLoggingIn(false);
     }
   };
 
+
+  const handleForgotPasswordSubmit = (e) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      alert('Please enter your registered corporate email.');
+      return;
+    }
+    setIsSubmitted(true);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded-xl shadow-md w-96">
-        <h2 className="text-2xl font-bold mb-6 text-center text-[#173F35]">LogiFleet Login</h2>
-        
-        {error && <div className="bg-red-50 text-red-500 p-2 rounded mb-4 text-sm">{error}</div>}
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">Email</label>
-          <input 
-            type="email" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            className="w-full border p-2 rounded-lg" 
-            required 
-          />
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 font-sans bg-[#f8faf9]">
+      {/* Left Banner Section with branding and features */}
+      <div className="relative hidden lg:flex flex-col justify-between p-12 bg-black text-white overflow-hidden">
+        {/* Adjusted Background Image - Removed heavy green tints and blend modes, using simple opacity */}
+        <div className="absolute inset-0 bg-cover bg-center opacity-50 transition-opacity" style={{ backgroundImage: `url(${loginImage})` }}></div>
+        {/* Subtle dark gradient for text readability without making everything green */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#091510] via-[#091510]/60 to-transparent"></div>
+
+        {/* Top LogiFleet Logo Header */}
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="bg-[#0fa979] p-2 rounded-xl text-white shadow-sm">
+            <Truck size={24} strokeWidth={2.5} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-white">LogiFleet</h2>
+            <p className="text-[11px] text-gray-300 uppercase tracking-widest font-medium">Fleet & Store Management</p>
+          </div>
         </div>
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-1">Password</label>
-          <input 
-            type="password" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            className="w-full border p-2 rounded-lg" 
-            required 
-          />
+
+        {/* Middle Promotional Content */}
+        <div className="relative z-10 max-w-lg my-auto py-12">
+          <h1 className="text-4xl font-extrabold tracking-tight leading-tight mb-6 text-white drop-shadow-sm">
+            Move goods between stores, without the wai
+          </h1>
+          <p className="text-gray-200 text-sm leading-relaxed mb-10 drop-shadow-sm">
+            Book transport, track your vehicle and confirm handover in one place.
+          </p>
+
+          <div className="space-y-6">
+            <div className="flex items-start gap-4">
+              <div className="bg-[#0fa979] p-1.5 rounded-full text-white mt-0.5 shadow-sm">
+                <CheckCircle2 size={18} strokeWidth={2.5} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white drop-shadow-sm">Book & Schedule Trips</h4>
+                <p className="text-xs text-gray-300 drop-shadow-sm">Request and track your deliveries seamlessly.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="bg-[#0fa979] p-1.5 rounded-full text-white mt-0.5 shadow-sm">
+                <CheckCircle2 size={18} strokeWidth={2.5} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white drop-shadow-sm">Track in Real Time</h4>
+                <p className="text-xs text-gray-300 drop-shadow-sm">Monitor vehicle location and trip progress.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="bg-[#0fa979] p-1.5 rounded-full text-white mt-0.5 shadow-sm">
+                <CheckCircle2 size={18} strokeWidth={2.5} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white drop-shadow-sm">Manage Deliveries</h4>
+                <p className="text-xs text-gray-300 drop-shadow-sm">Get updates on items and arrivals instantly.</p>
+              </div>
+            </div>
+          </div>
         </div>
-        
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full bg-[#173F35] text-white py-2 rounded-lg font-semibold hover:bg-[#0F2C25] disabled:opacity-50"
-        >
-          {loading ? 'Logging in...' : 'Login'}
-        </button>
-      </form>
+
+        {/* Footer info */}
+        <div className="relative z-10 text-xs text-gray-400 font-medium drop-shadow-sm">
+          © 2026 LogiFleet Ops • Enterprise Logistics Core
+        </div>
+      </div>
+
+      {/* Right Login Card Section */}
+      <div className="flex flex-col items-center justify-center p-8 sm:p-12 lg:p-16">
+        <div className="w-full max-w-[420px] bg-white p-8 sm:p-10 rounded-3xl border border-gray-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)]">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Sign In</h2>
+            <p className="text-xs text-gray-500 mt-1">Sign in to your <span className='text-[#0fa979]'>LogiFleet</span> account</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-5">
+            {loginError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{loginError}</p>}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Email</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                  <Mail size={18} />
+                </div>
+                <inpu
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your Email"
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#0fa979]/20 focus:border-[#0fa979] transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Password</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                  <Lock size={18} />
+                </div>
+                <inpu
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full pl-11 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#0fa979]/20 focus:border-[#0fa979] transition-all"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs font-medium pt-1">
+              <label className="flex items-center gap-2 cursor-pointer text-gray-600">
+                <inpu
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-[#0fa979] focus:ring-[#0fa979]"
+                />
+                Remember me
+              </label>
+              <button
+                type="button"
+                onClick={() => { setShowForgotModal(true); setIsSubmitted(false); setForgotEmail(''); }}
+                className="text-[#0fa979] hover:underline font-semibold bg-transparent border-none cursor-pointer p-0"
+              >
+                Forgot Password
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full py-3.5 bg-[#0fa979] text-white rounded-xl font-bold text-sm hover:bg-[#0d9468] disabled:cursor-wait disabled:opacity-70 transition-colors shadow-[0_4px_12px_rgba(15,169,121,0.25)] mt-2 cursor-pointer"
+            >
+              {isLoggingIn ? 'Signing In…' : 'Sign In'}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Forgot Password Modal Component */}
+      {showForgotModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button
+              onClick={() => setShowForgotModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <X size={20} />
+            </button>
+
+            {!isSubmitted ? (
+              <div>
+                <div className="w-12 h-12 bg-[#e8f8f2] text-[#0fa979] rounded-2xl flex items-center justify-center mb-4">
+                  <Lock size={24} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-1">Forgot Password?</h3>
+                <p className="text-xs text-gray-500 mb-6">Enter your corporate email address and we'll dispatch a secure recovery token.</p>
+
+                <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Corporate Email</label>
+                    <inpu
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="e.g. name@logifleet.lk"
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:border-[#0fa979]"
+                      required
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-3 bg-[#113b2e] text-white font-bold rounded-xl text-xs hover:bg-[#0fa979] transition-colors shadow-sm"
+                    >
+                      Send Reset Link
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <div className="w-16 h-16 bg-[#d1f4e0] text-[#0d9468] rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Recovery Link Dispatched</h3>
+                <p className="text-xs text-gray-500 mb-6">We have sent a 48-hour secure cryptographic password reset token to <span className="font-semibold text-gray-800">{forgotEmail}</span>.</p>
+                <button
+                  onClick={() => setShowForgotModal(false)}
+                  className="w-full py-3 bg-[#113b2e] text-white font-bold rounded-xl text-xs hover:bg-[#0fa979] transition-colors shadow-sm"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-export default Login;
+}

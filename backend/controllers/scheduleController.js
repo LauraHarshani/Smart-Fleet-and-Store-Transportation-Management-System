@@ -1,29 +1,50 @@
+const mongoose = require('mongoose');
 const StoreSlot = require('../models/StoreSlot');
-const Booking = require('../models/booking');
 
+const parseDate = (value, label) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error(`Invalid ${label}.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return date;
+};
 
 const getStoreSchedule = async (req, res) => {
   try {
-    const { storeId, startDate, endDate } = req.query;
-
-    
-    const query = { store: storeId };
-    if (startDate && endDate) {
-      query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    const storeId = req.storeScope || req.query.storeId;
+    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid store ID is required to load the schedule.',
+      });
     }
 
-    
-    const slots = await StoreSlot.find(query)
-      .populate({
-        path: 'booking',
-        select: 'bookingId type status vehicle',
-        populate: { path: 'vehicle', select: 'registrationNumber type' }
-      })
-      .sort({ date: 1, startTime: 1 });
+    const query = { store: storeId };
+    const startDate = parseDate(req.query.startDate, 'start date');
+    const endDate = parseDate(req.query.endDate, 'end date');
+    if (startDate && endDate && endDate < startDate) {
+      return res.status(400).json({ success: false, message: 'End date must be after start date.' });
+    }
+    if (startDate || endDate) {
+      query.startAt = {};
+      if (startDate) query.startAt.$gte = startDate;
+      if (endDate) query.startAt.$lte = endDate;
+    }
 
-    res.status(200).json({ success: true, count: slots.length, data: slots });
+    const slots = await StoreSlot.find(query)
+      .populate('store', 'name code')
+      .populate('trip', 'id route status vehicle driver')
+      .sort({ startAt: 1 });
+
+    return res.status(200).json({ success: true, count: slots.length, data: slots });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Unable to load the store schedule.',
+    });
   }
 };
 

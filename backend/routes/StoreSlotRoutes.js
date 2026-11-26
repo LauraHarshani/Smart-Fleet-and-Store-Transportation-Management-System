@@ -1,23 +1,40 @@
-const express = require('express');
-const {
-  cancelSlot,
-  createSlot,
-  getSlotById,
-  getSlots,
-  updateSlot,
-} = require('../controllers/StoreSlotController');
-const { protect } = require('../middleware/authMiddleware');
-const { storeScope } = require('../middleware/storeScopeMiddleware');
 
+const express = require("express");
 const router = express.Router();
 
-router.use(protect, storeScope);
-router.route('/')
-  .get(getSlots)
-  .post(createSlot);
-router.route('/:id')
-  .get(getSlotById)
-  .patch(updateSlot);
-router.patch('/:id/cancel', cancelSlot);
+const {
+  createSlot,
+  getSlots,
+  getSlotById,
+  updateSlot,
+  cancelSlot,
+} = require("../controllers/StoreSlotController");
+
+const { protect } = require("../middleware/authMiddleware");
+const { allowRoles } = require("../middleware/roleMiddleware");
+const { storeScope } = require("../middleware/storeScopeMiddleware");
+
+router.use(protect);
+
+router.use(
+  allowRoles("ADMIN", "STORE MANAGER", "STORE EMPLOYEE")
+);
+
+router.use(storeScope);
+
+// Create a reservation
+router.post("/", createSlot);
+
+// Retrieve reservations
+router.get("/", getSlots);
+
+// Retrieve one reservation
+router.get("/:id", getSlotById);
+
+// Update a reservation
+router.patch("/:id", updateSlot);
+
+// Cancel a reservation
+router.patch("/:id/cancel", cancelSlot);
 
 module.exports = router;

@@ -12,16 +12,17 @@ const storeRoutes = require("./routes/storeRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
 const itemRoutes = require("./routes/itemRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
-const auditRoutes = require("./routes/auditRoutes");   // BE-10
-const reportRoutes = require("./routes/reportRoutes"); // BE-11
-
+const storeBookingRoutes = require("./routes/StoreBookingRoutes");
+const tripRoutes = require("./routes/tripRoutes");
+const auditRoutes = require("./routes/auditRoutes");
+const reportRoutes = require("./routes/reportRoutes");
+const storeSlotRoutes = require("./routes/StoreSlotRoutes");
 // Admin paths
 const dashboardRoutes = require("./routes/dashboardRoutes");
 
 // Store Operations Routes (BE-8 & BE-9)
 const scheduleRoutes = require("./routes/scheduleRoutes");
 const confirmationRoutes = require("./routes/confirmationRoutes");
-const storeSlotRoutes = require("./routes/StoreSlotRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,13 +47,15 @@ app.use("/api/stores", storeRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/items", itemRoutes);
 app.use("/api/bookings", bookingRoutes);
-app.use("/api/audit-logs", auditRoutes); // BE-10
-app.use("/api/reports", reportRoutes);   // BE-11
+app.use("/api/store-bookings", storeBookingRoutes);
+app.use("/api/trips", tripRoutes);
+app.use("/api/audit-logs", auditRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/store-slots", storeSlotRoutes);
 
 // Store Operations Routes
 app.use("/api/schedules", scheduleRoutes);       // BE-8
 app.use("/api/confirmations", confirmationRoutes); // BE-9
-app.use("/api/store-slots", storeSlotRoutes);
 
 app.get("/", (req, res) => res.send("Smart Fleet API is running..."));
 

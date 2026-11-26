@@ -1,6 +1,17 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const AuthUser = require("../models/authUser");
+const Store = require("../models/store");
+
+const resolveStoreId = async (storeValue) => {
+    if (!storeValue) return null;
+    const value = storeValue.toString().trim();
+    if (/^[a-f\d]{24}$/i.test(value)) return value;
+    const store = await Store.findOne({
+        $or: [{ name: value }, { code: value }, { id: value }],
+    }).select("_id").lean();
+    return store?._id.toString() || null;
+};
 
 //Cookie configuration
 const cookieOptions = {
@@ -83,17 +94,21 @@ const login = async (req,res) => {
             maxAge: 30 * 24 * 60 * 60 * 1000
         } : cookieOptions);
 
+        const storeId = user.role === "ADMIN" ? null : await resolveStoreId(user.store);
+
         // Return user details without password
         return res.status(200).json({
             success: true,
             message: "Login successful",
             user: {
+                _id: user._id.toString(),
                 id: user.id,
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
                 role: user.role,
                 store: user.store,
+                storeId,
                 department: user.department,
                 avatar: user.avatar,
                 status: user.status
@@ -125,12 +140,14 @@ const getMe = async (req,res) => {
         return res.status(200).json({
             success: true,
             user: {
+                _id: user._id.toString(),
                 id: user.id,
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
                 role: user.role,
                 store: user.store,
+                storeId: req.user.storeId || null,
                 department: user.department,
                 avatar: user.avatar,
                 status: user.status
@@ -165,12 +182,14 @@ const updateMe = async (req, res) => {
             success: true,
             message: "Profile updated successfully",
             user: {
+                _id: user._id.toString(),
                 id: user.id,
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
                 role: user.role,
                 store: user.store,
+                storeId: req.user.storeId || null,
                 department: user.department,
                 avatar: user.avatar,
                 status: user.status,

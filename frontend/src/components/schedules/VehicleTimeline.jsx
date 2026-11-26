@@ -53,6 +53,7 @@ const STATUSES = [
 ];
 
 const timeToPercent = (time) => {
+  if (!/^\d{1,2}:\d{2}$/.test(String(time || ""))) return 0;
   const [hours, minutes] = time.split(":").map(Number);
   const totalMinutes = hours * 60 + minutes;
   const startMinutes = 7 * 60;
@@ -69,6 +70,7 @@ const timeToPercent = (time) => {
 
 const VehicleTimeline = ({
   trips,
+  vehicles = [],
   selectedTripId,
   onSelectTrip,
   vehicleFilter,
@@ -76,6 +78,7 @@ const VehicleTimeline = ({
   tripStatusFilter,
   setTripStatusFilter,
 }) => {
+  const vehicleOptions = ["All Vehicles", ...(vehicles.length ? [...new Set(vehicles)] : VEHICLES.slice(1))];
   return (
     <div className="rounded-2xl border border-[#E2E8E0] bg-white p-5 shadow-sm">
       {/* Filters and legend */}
@@ -88,7 +91,7 @@ const VehicleTimeline = ({
               onChange={(event) => setVehicleFilter(event.target.value)}
               className="h-10 min-w-[135px] appearance-none rounded-xl border border-[#27866A] bg-white py-2 pl-4 pr-9 text-sm text-gray-600 outline-none focus:ring-2 focus:ring-[#B5D6A7]"
             >
-              {VEHICLES.map((vehicle) => (
+              {vehicleOptions.map((vehicle) => (
                 <option key={vehicle} value={vehicle}>
                   {vehicle}
                 </option>

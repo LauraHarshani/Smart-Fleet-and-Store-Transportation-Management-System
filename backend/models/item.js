@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 
 const itemSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true, trim: true, uppercase: true },

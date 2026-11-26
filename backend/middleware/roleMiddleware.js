@@ -1,3 +1,5 @@
+const STORE_ROLES = new Set(['STORE MANAGER', 'STORE EMPLOYEE']);
+
 const allowRoles = (...allowedRoles) => {
     return (req, res, next) => {
         // Check whether the user is authenticated
@@ -9,7 +11,12 @@ const allowRoles = (...allowedRoles) => {
         }
 
         // Check whether the user's role is permitted
-        if (!allowedRoles.includes(req.user.role)) {
+        const isAllowed = allowedRoles.includes(req.user.role) || (
+            STORE_ROLES.has(req.user.role) &&
+            allowedRoles.some((role) => STORE_ROLES.has(role))
+        );
+
+        if (!isAllowed) {
             return res.status(403).json({
                 success: false,
                 message: "Access denied. You do not have permission to perform this action."
