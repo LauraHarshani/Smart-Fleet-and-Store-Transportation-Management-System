@@ -19,6 +19,7 @@ import {
   Store,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import api from "../services/api";
 
 // Page titles
 const pageTitles = {
@@ -43,6 +44,65 @@ const NavItem = ({ to, icon: Icon, label, active }) => (
     <span className="text-base">{label}</span>
   </Link>
 );
+
+const notificationActionCopy = {
+  CREATED: { title: "Booking created", message: (code) => `Booking ${code} was created.` },
+  UPDATED: { title: "Booking updated", message: (code) => `Booking ${code} was updated.` },
+  SUBMITTED: { title: "Booking submitted", message: (code) => `Booking ${code} was submitted for review.` },
+  APPROVED: { title: "Booking approved", message: (code) => `Booking ${code} was approved.` },
+  REJECTED: { title: "Booking rejected", message: (code) => `Booking ${code} was rejected.` },
+  CHANGES_REQUESTED: { title: "Changes requested", message: (code) => `Changes were requested for booking ${code}.` },
+  IN_PROGRESS: { title: "Booking in progress", message: (code) => `Booking ${code} is now in progress.` },
+  COMPLETED: { title: "Booking completed", message: (code) => `Booking ${code} was completed.` },
+  CANCELLED: { title: "Booking cancelled", message: (code) => `Booking ${code} was cancelled.` },
+  HANDOVER_RECEIPT_RECORDED: { title: "Goods updated", message: (code) => `Goods handover or receipt was updated for booking ${code}.` },
+  STOP_UPDATED: { title: "Trip progress updated", message: (code) => `A stop was updated for booking ${code}.` },
+};
+
+const formatNotificationTime = (value) => {
+  if (!value) return "Time unavailable";
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return "Time unavailable";
+
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (elapsedMinutes < 1) return "Just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes} min${elapsedMinutes === 1 ? "" : "s"} ago`;
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours} hour${elapsedHours === 1 ? "" : "s"} ago`;
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) return `${elapsedDays} day${elapsedDays === 1 ? "" : "s"} ago`;
+  return new Date(timestamp).toLocaleDateString();
+};
+
+const toStoreNotifications = (bookings) => bookings
+  .flatMap((booking) => {
+    const bookingCode = booking.bookingCode || booking._id;
+    const history = booking.changeHistory?.length
+      ? booking.changeHistory
+      : [{
+        action: booking.status?.toUpperCase().replace(/\s+/g, "_"),
+        toStatus: booking.status,
+        changedAt: booking.updatedAt || booking.createdAt,
+      }];
+
+    return history.map((change, index) => {
+      const copy = notificationActionCopy[change.action] || notificationActionCopy[change.toStatus?.toUpperCase().replace(/\s+/g, "_")];
+      const timestamp = change.changedAt || booking.updatedAt || booking.createdAt;
+
+      return {
+        id: `${booking._id}-${change._id || `${change.action || change.toStatus || "update"}-${index}`}`,
+        title: copy?.title || "Booking update",
+        message: change.reason || copy?.message(bookingCode) || `Booking ${bookingCode} was updated.`,
+        time: formatNotificationTime(timestamp),
+        timestamp: timestamp ? new Date(timestamp).getTime() : 0,
+        read: false,
+      };
+    });
+  })
+  .sort((left, right) => right.timestamp - left.timestamp)
+  .slice(0, 20);
 
 const StoreLayout = () => {
   const location = useLocation();
@@ -71,61 +131,37 @@ const StoreLayout = () => {
     ? "Goods Confirmation"
     : pageTitles[location.pathname] || "Store";
 
-  // Notification sample data
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: "Booking update",
-      message: "Your booking BK-256 is awaiting preparation.",
-      time: "10 minutes ago",
-      read: false,
-    },
-    {
-      id: 2,
-      title: "Trip started",
-      message: "Vehicle VH-020 has started its assigned trip.",
-      time: "1 hour ago",
-      read: false,
-    },
-    {
-      id: 3,
-      title: "Booking approved",
-      message: "Your booking BK-257 has been approved.",
-      time: "2 hours ago",
-      read: false,
-    },
-    {
-      id: 4,
-      title: "Booking declined",
-      message: "Your booking BK-258 was declined. Check the booking details for more information.",
-      time: "3 hours ago",
-      read: false,
-    },
-    {
-      id: 5,
-      title: "Vehicle arrived",
-      message: "Vehicle VH-020 has arrived at your store.",
-      time: "4 hours ago",
-      read: false,
-    },
-    {
-      id: 6,
-      title: "Delivery delayed",
-      message: "Your delivery for booking BK-259 is delayed. Check trip progress for updates.",
-      time: "5 hours ago",
-      read: false,
-    },
-    {
-      id: 7,
-      title: "Booking completed",
-      message: "Your booking BK-260 has been completed.",
-      time: "Yesterday",
-      read: false,
-    },
-  ]);
-
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [notificationsError, setNotificationsError] = useState("");
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationPanelRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadNotifications = async () => {
+      setNotificationsLoading(true);
+      setNotificationsError("");
+      try {
+        const { data } = await api.get("/store-bookings");
+        if (!Array.isArray(data?.bookings)) {
+          throw new Error("Unexpected bookings response.");
+        }
+        if (active) setNotifications(toStoreNotifications(data.bookings));
+      } catch (error) {
+        if (active) {
+          setNotifications([]);
+          setNotificationsError(error.response?.data?.message || "Unable to load store notifications.");
+        }
+      } finally {
+        if (active) setNotificationsLoading(false);
+      }
+    };
+
+    void loadNotifications();
+    return () => { active = false; };
+  }, [user?.storeId, user?.id, user?._id]);
 
   // Count unread notifications
   const unreadCount = notifications.filter(
@@ -350,15 +386,23 @@ const StoreLayout = () => {
                   </div>
 
                   {/* Notification List */}
-                  <div className="max-h-[350px] overflow-y-auto">
+                  <div className="max-h-[350px] overflow-y-auto px-4 pb-4">
 
-                    {notifications.length > 0 ? (
+                    {notificationsLoading ? (
+                      <p className="px-0 py-8 text-center text-sm text-gray-500">
+                        Loading notifications…
+                      </p>
+                    ) : notificationsError ? (
+                      <p role="alert" className="px-0 py-8 text-center text-sm text-red-600">
+                        {notificationsError}
+                      </p>
+                    ) : notifications.length > 0 ? (
                       notifications.map((notification) => (
                         <button
                           key={notification.id}
                           type="button"
                           onClick={() => markAsRead(notification.id)}
-                          className={`w-full border-b border-gray-100 px-4 py-3 text-left transition hover:bg-gray-50 ${
+                          className={`w-full border-b border-gray-100 px-0 py-3 text-left transition hover:bg-gray-50 ${
                             notification.read
                               ? "bg-white"
                               : "bg-emerald-50/40"
@@ -388,7 +432,7 @@ const StoreLayout = () => {
                         </button>
                       ))
                     ) : (
-                      <p className="px-4 py-8 text-center text-sm text-gray-500">
+                      <p className="px-0 py-8 text-center text-sm text-gray-500">
                         No notifications available.
                       </p>
                     )}
