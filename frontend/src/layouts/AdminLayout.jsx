@@ -235,7 +235,12 @@ const AdminLayout = () => {
                             )}
                         </button>
                         
-                        <div className="flex items-center gap-3 border-l pl-6 border-gray-200">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/profile')}
+                            aria-label="Open admin profile"
+                            className="flex items-center gap-3 border-l pl-6 border-gray-200 text-left cursor-pointer"
+                        >
                             <div className="w-10 h-10 rounded-full bg-[#113b2e] flex items-center justify-center text-white font-semibold text-sm">
                                 {(user?.name || 'Admin').trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
@@ -243,7 +248,7 @@ const AdminLayout = () => {
                                 <span className="text-sm font-bold text-gray-800 leading-tight">{user?.name || 'Admin'}</span>
                                 <span className="text-xs text-gray-500">{user?.role || 'Administrator'}</span>
                             </div>
-                        </div>
+                        </button>
                     </div>
                 </header>
 
