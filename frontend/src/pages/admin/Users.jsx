@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Download, Plus, Edit2, Trash2, Shield, Truck, Store, ChevronLeft, ChevronRight, RotateCcw, ArrowLeft, Image as ImageIcon, History, ChevronDown, CheckCircle2, Lock } from 'lucide-react';
 import { getAllUsers, deactivateUser, createUser, updateUser } from '../../services/userService';
+import { getAllStores } from '../../services/storeService';
 
 export default function Users() {
   const [users, setUsers] = useState([]);
+  const [stores, setStores] = useState([]);
+  const [storesLoading, setStoresLoading] = useState(true);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
@@ -48,6 +51,7 @@ export default function Users() {
 
   useEffect(() => {
     loadUsers();
+    loadStores();
   }, []);
 
   useEffect(() => {
@@ -65,6 +69,19 @@ export default function Users() {
     } catch (error) {
       console.error('Error fetching users:', error);
       alert(error.response?.data?.message || 'Failed to load users');
+    }
+  };
+
+  const loadStores = async () => {
+    try {
+      const data = await getAllStores();
+      const storeList = Array.isArray(data) ? data : data?.stores || data?.data || [];
+      setStores(storeList);
+    } catch (error) {
+      console.error('Error fetching stores:', error);
+      alert(error.response?.data?.message || 'Failed to load stores');
+    } finally {
+      setStoresLoading(false);
     }
   };
 
@@ -475,16 +492,22 @@ export default function Users() {
                                       </div>
                                       <select 
                                         value={newUserStore}
-                                        disabled={newUserRole === 'ADMIN'}
+                                        disabled={newUserRole === 'ADMIN' || storesLoading || stores.length === 0}
                                         onChange={(e) => setNewUserStore(e.target.value)}
                                         className={`w-full pl-9 pr-10 py-3 border border-gray-200 rounded-lg text-sm outline-none appearance-none transition-colors focus:border-[#0fa979] ${newUserRole === 'ADMIN' ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : newUserStore === '' ? 'text-gray-500 bg-white cursor-pointer' : 'text-gray-900 bg-white cursor-pointer'}`}
                                       >
                                           <option value="" disabled hidden>
-                                            {newUserRole === 'ADMIN' ? 'All Stores (Global Admin Access)' : 'Select operating facility (e.g. Colombo Main Hub)...'}
+                                            {newUserRole === 'ADMIN'
+                                              ? 'All Stores (Global Admin Access)'
+                                              : storesLoading
+                                                ? 'Loading stores...'
+                                                : stores.length
+                                                  ? 'Select an existing store...'
+                                                  : 'No stores found; create a store first'}
                                           </option>
-                                          <option value="Colombo Main Store">Colombo Main Store</option>
-                                          <option value="Kandy Branch">Kandy Branch</option>
-                                          <option value="Galle Warehouse">Galle Warehouse</option>
+                                          {stores.map((store) => (
+                                            <option key={store._id} value={store.name}>{store.name}</option>
+                                          ))}
                                       </select>
                                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400"><ChevronDown size={16}/></div>
                                   </div>
@@ -825,14 +848,22 @@ export default function Users() {
                                       </div>
                                       <select 
                                         value={newUserStore}
-                                        disabled={newUserRole === 'ADMIN'}
+                                        disabled={newUserRole === 'ADMIN' || storesLoading || stores.length === 0}
                                         onChange={(e) => setNewUserStore(e.target.value)}
                                         className={`w-full pl-9 pr-10 py-3 border border-gray-200 rounded-lg text-sm outline-none appearance-none ${newUserRole === 'ADMIN' ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-900 focus:border-[#0fa979] cursor-pointer'}`}
                                       >
-                                          <option value="">{newUserRole === 'ADMIN' ? 'All Stores (Global Admin Access)' : 'Select Store...'}</option>
-                                          <option value="Colombo Main Store">Colombo Main Store (Western Terminal)</option>
-                                          <option value="Kandy Branch">Kandy Branch</option>
-                                          <option value="Galle Warehouse">Galle Warehouse</option>
+                                          <option value="">
+                                            {newUserRole === 'ADMIN'
+                                              ? 'All Stores (Global Admin Access)'
+                                              : storesLoading
+                                                ? 'Loading stores...'
+                                                : stores.length
+                                                  ? 'Select Store...'
+                                                  : 'No stores found; create a store first'}
+                                          </option>
+                                          {stores.map((store) => (
+                                            <option key={store._id} value={store.name}>{store.name}</option>
+                                          ))}
                                       </select>
                                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-600"><ChevronDown size={16}/></div>
                                   </div>
@@ -1048,9 +1079,9 @@ export default function Users() {
            <div className="relative">
               <select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)} className="appearance-none bg-gray-50 border border-gray-100 rounded-xl pl-5 pr-10 py-2.5 text-[13px] font-medium text-gray-700 outline-none focus:ring-2 focus:ring-[#0fa979]/20 hover:bg-gray-100 transition-colors cursor-pointer min-w-[140px]">
                   <option value="All Stores">All Stores</option>
-                  <option value="Colombo Main Store">Colombo Main Store</option>
-                  <option value="Kandy Branch">Kandy Branch</option>
-                  <option value="Galle Warehouse">Galle Warehouse</option>
+                  {stores.map((store) => (
+                    <option key={store._id} value={store.name}>{store.name}</option>
+                  ))}
               </select>
               <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
                   <ChevronDown size={16} strokeWidth={2.5}/>

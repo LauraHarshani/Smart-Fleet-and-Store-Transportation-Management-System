@@ -197,7 +197,8 @@ const StoreTimeline = ({
                       const left = timeToPercent(slot.start);
                       const right = timeToPercent(slot.end);
                       const width = right - left;
-                      const isSelected = selectedSlotId === slot.id;
+                      const slotKey = slot._id || slot.id;
+                      const isSelected = selectedSlotId === slotKey;
                       const formatTime = (time) => {
                         const [hours, minutes] = time.split(":");
                         return `${Number(hours)}:${minutes}`;
@@ -206,7 +207,7 @@ const StoreTimeline = ({
                       return (
                         <button
                           key={slot.id}
-                          onClick={() => onSelectSlot(slot.id)}
+                          onClick={() => onSelectSlot(slotKey)}
                           title={`${slot.id} · ${slot.type} · ${slot.start}–${slot.end}`}
                           className={`absolute top-[13px] z-10 flex h-[46px] min-w-[55px] flex-col justify-center overflow-hidden rounded-lg px-3 text-left transition hover:brightness-[0.97] ${
                             isSelected

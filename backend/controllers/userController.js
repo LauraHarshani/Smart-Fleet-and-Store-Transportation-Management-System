@@ -1,4 +1,21 @@
+const mongoose = require('mongoose');
 const User = require('../models/authUser');
+const Store = require('../models/store');
+
+const findAssignedStore = async (value) => {
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const assignedStore = value.trim();
+    if (mongoose.Types.ObjectId.isValid(assignedStore)) {
+        return Store.findById(assignedStore);
+    }
+    return Store.findOne({
+        $or: [
+            { name: assignedStore },
+            { code: assignedStore },
+            { id: assignedStore },
+        ],
+    });
+};
 
 const publicUser = (user) => {
     const result = user.toObject ? user.toObject() : { ...user };
@@ -27,13 +44,18 @@ const createUser = async (req, res) => {
             return res.status(400).json({ message: 'Assigned store is required for non-admin users' });
         }
 
+        const assignedStore = role === 'ADMIN' ? null : await findAssignedStore(store);
+        if (role !== 'ADMIN' && !assignedStore) {
+            return res.status(400).json({ message: 'Assigned store does not exist. Select an existing store.' });
+        }
+
         const newUser = await User.create({
             name: name.trim(),
             email: email.trim().toLowerCase(),
             phone: phone?.trim() || '+94 77 000 0000',
             password: 'LogiFleet@123',
             role,
-            store: role === 'ADMIN' ? null : store.trim(),
+            store: assignedStore?.name || null,
             department: department?.trim() || '',
             status: status || 'Active',
             avatar: avatar || null,
@@ -58,12 +80,16 @@ const updateUser = async (req, res) => {
         if (nextRole !== 'ADMIN' && !nextStore) {
             return res.status(400).json({ message: 'Assigned store is required for non-admin users' });
         }
+        const assignedStore = nextRole === 'ADMIN' ? null : await findAssignedStore(nextStore);
+        if (nextRole !== 'ADMIN' && !assignedStore) {
+            return res.status(400).json({ message: 'Assigned store does not exist. Select an existing store.' });
+        }
 
         if (name !== undefined) user.name = name.trim();
         if (email !== undefined) user.email = email.trim().toLowerCase();
         if (phone !== undefined) user.phone = phone.trim();
         if (role !== undefined) user.role = role;
-        user.store = nextStore;
+        user.store = assignedStore?.name || null;
         if (department !== undefined) user.department = department.trim();
         if (status !== undefined) {
             if (user.status === 'Active' && status !== 'Active') user.tokenVersion += 1;

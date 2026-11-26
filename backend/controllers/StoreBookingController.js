@@ -12,6 +12,18 @@ const storeRefId = (store) => {
   return id ? id.toString() : '';
 };
 const STORE_ROLES = new Set(['store manager', 'store employee']);
+const isAdminUser = (req) => ['admin', 'system administrator', 'administrator'].includes(
+  (req.user?.role || '').toString().toLowerCase()
+);
+const checkBookingSideScope = (req, booking, side) => {
+  if (!req.user || isAdminUser(req)) return null;
+  const userStoreId = req.user.storeId;
+  if (!userStoreId || !isValidId(userStoreId)) return 'No store has been assigned to your account';
+  const expectedStore = storeRefId(side === 'pickup' ? booking.pickupStore : booking.destinationStore);
+  return userStoreId.toString() === expectedStore
+    ? null
+    : `Only the ${side} store can perform this action`;
+};
 
 const ALLOWED_TRANSITIONS = {
   Draft: ['Submitted', 'Cancelled'],
@@ -400,6 +412,30 @@ exports.recordHandoverAndReceipt = async (req, res) => {
       return res.status(400).json({ message: 'items array is required' });
     }
 
+    const containsHandover = updates.some((item) => item.handedOverQuantity !== undefined && item.handedOverQuantity !== null);
+    const containsReceipt = updates.some((item) => item.receivedQuantity !== undefined && item.receivedQuantity !== null);
+    if (booking.status === 'Completed' || booking.status === 'Cancelled' || booking.status === 'Rejected') {
+      return res.status(400).json({ message: `Goods quantities cannot be changed when booking is ${booking.status}` });
+    }
+    if (containsHandover) {
+      const sideErr = checkBookingSideScope(req, booking, 'pickup');
+      if (sideErr) return res.status(403).json({ message: sideErr });
+      if (!['Approved', 'In Progress'].includes(booking.status)) {
+        return res.status(400).json({ message: 'Handover quantities can only be recorded after booking approval' });
+      }
+    }
+    if (containsReceipt) {
+      const sideErr = checkBookingSideScope(req, booking, 'destination');
+      if (sideErr) return res.status(403).json({ message: sideErr });
+      if (booking.status !== 'In Progress') {
+        return res.status(400).json({ message: 'Receipt quantities can only be recorded while the trip is in progress' });
+      }
+      const destinationStop = booking.stops.find((stop) => stop.stopType === 'DROP');
+      if (!destinationStop || destinationStop.status !== 'Arrived') {
+        return res.status(400).json({ message: 'The destination stop must be marked Arrived before receipt quantities are recorded' });
+      }
+    }
+
     for (const upd of updates) {
       const targetLine = booking.items.find(
         (line) =>
@@ -466,6 +502,10 @@ exports.updateBookingStop = async (req, res) => {
       return res.status(404).json({ message: 'Booking stop not found' });
     }
 
+    if (req.user && !isAdminUser(req) && storeRefId(stop.store) !== String(req.user.storeId || '')) {
+      return res.status(403).json({ message: 'You can only update stops assigned to your store' });
+    }
+
     const body = req.body || {};
     const validStopStatuses = ['Pending', 'Arrived', 'Completed', 'Skipped'];
     if (body.status !== undefined) {
@@ -524,6 +564,23 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
     });
     if (scopeErr) return res.status(403).json({ message: scopeErr });
 
+    if (targetStatus === 'In Progress') {
+      const sideErr = checkBookingSideScope(req, booking, 'pickup');
+      if (sideErr) return res.status(403).json({ message: sideErr });
+    }
+    if (targetStatus === 'Completed') {
+      const sideErr = checkBookingSideScope(req, booking, 'destination');
+      if (sideErr) return res.status(403).json({ message: sideErr });
+      const hasUnconfirmedItems = booking.items.some((line) => line.receivedQuantity === null || line.receivedQuantity === undefined);
+      if (hasUnconfirmedItems) {
+        return res.status(400).json({ message: 'Record received quantities for every item before completing the booking' });
+      }
+      const destinationStop = booking.stops.find((stop) => stop.stopType === 'DROP');
+      if (!destinationStop || destinationStop.status !== 'Completed') {
+        return res.status(400).json({ message: 'Complete the destination stop before completing the booking' });
+      }
+    }
+
     const allowedNext = ALLOWED_TRANSITIONS[booking.status] || [];
     if (!allowedNext.includes(targetStatus)) {
       return res.status(400).json({
@@ -537,6 +594,30 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
       return res.status(400).json({
         message: `A reason/note is required for "${targetStatus}"`,
       });
+    }
+
+    if (targetStatus === 'In Progress') {
+      const checks = body.inventoryQuantities;
+      if (!Array.isArray(checks) || checks.length !== booking.items.length) {
+        return res.status(400).json({ message: 'Available inventory must be checked for every booking item before starting the trip' });
+      }
+      const seen = new Set();
+      for (const check of checks) {
+        const line = booking.items.find((entry) => entry._id.toString() === String(check.lineId || ''));
+        const available = Number(check.availableQuantity);
+        if (!line || seen.has(String(check.lineId))) {
+          return res.status(400).json({ message: 'Inventory check contains an invalid or duplicate booking item' });
+        }
+        if (!Number.isFinite(available) || available < 0) {
+          return res.status(400).json({ message: 'Available inventory must be a non-negative number for every item' });
+        }
+        if (available < line.quantity) {
+          const itemName = line.item?.name || 'A booking item';
+          return res.status(400).json({ message: `${itemName} has only ${available} available; ${line.quantity} required` });
+        }
+        seen.add(String(check.lineId));
+        line.inventoryVerifiedQuantity = available;
+      }
     }
 
     const actorId =

@@ -18,7 +18,8 @@ const createError = (message, statusCode = 400) => {
 };
 
 const assertStoreScope = (slot, storeScope) => {
-  if (storeScope && slot.store.toString() !== storeScope.toString()) {
+  const slotStoreId = slot.store?._id || slot.store;
+  if (storeScope && slotStoreId.toString() !== storeScope.toString()) {
     throw createError("Slot reservation not found.", 404);
   }
 };
@@ -43,9 +44,9 @@ const validateSlotTime = (startAt, endAt) => {
 };
 
 // CREATE SLOT RESERVATION
-const createSlotInSession = async (slotData, session) => {
+const createSlotInSession = async (slotData = {}, session, storeScope = null) => {
   const {
-    store,
+    store: requestedStore,
     trip,
     stopId,
     vehicle,
@@ -54,6 +55,7 @@ const createSlotInSession = async (slotData, session) => {
     endAt,
     notes,
   } = slotData;
+  const store = storeScope || requestedStore;
 
   if (
     !store ||
@@ -104,14 +106,20 @@ const createSlotInSession = async (slotData, session) => {
 };
 
 // CREATE SLOT RESERVATION
-const createSlot = async (slotData, session = null) => {
+const createSlot = async (slotData = {}, scopeOrSession = null) => {
+  const isSession = Boolean(
+    scopeOrSession && typeof scopeOrSession.withTransaction === "function"
+  );
+  const session = isSession ? scopeOrSession : null;
+  const storeScope = isSession ? null : scopeOrSession;
+
   if (session) return createSlotInSession(slotData, session);
 
   const ownSession = await mongoose.startSession();
   let newSlot;
   try {
     await ownSession.withTransaction(async () => {
-      newSlot = await createSlotInSession(slotData, ownSession);
+      newSlot = await createSlotInSession(slotData, ownSession, storeScope);
     });
   } finally {
     await ownSession.endSession();
@@ -141,7 +149,7 @@ const getSlots = async (filters = {}) => {
   }
 
   return await StoreSlot.find(query)
-    .populate("store", "name code")
+    .populate("store", "name code docks")
     .populate("trip", "id route status")
     .sort({ startAt: 1 });
 };
@@ -153,7 +161,7 @@ const getSlotById = async (slotId, storeScope = null) => {
   }
 
   const slot = await StoreSlot.findById(slotId)
-    .populate("store", "name code")
+    .populate("store", "name code docks")
     .populate("trip", "id route status");
 
   if (!slot) {

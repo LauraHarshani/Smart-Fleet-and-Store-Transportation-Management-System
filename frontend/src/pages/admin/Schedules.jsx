@@ -1,6 +1,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, Loader2, Plus, X } from "lucide-react";
+import { CalendarDays, Loader2, Plus, RefreshCw, X } from "lucide-react";
 
 import ScheduleTabs from "../../components/schedules/ScheduleTabs";
 import VehicleTimeline from "../../components/schedules/VehicleTimeline";
@@ -274,7 +274,7 @@ const Schedules = () => {
               className="w-[145px] bg-transparent outline-none"
             />
           </label>
-          <button type="button" onClick={loadSchedule} className="h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50">Refresh</button>
+          <button type="button" onClick={loadSchedule} className="flex h-10 items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"><RefreshCw size={16} />Refresh</button>
           <button type="button" onClick={() => setIsCreateSlotOpen(true)} disabled={!stores.length || !trips.some((trip) => trip._id && trip.stops?.length)} className="flex h-10 items-center gap-2 rounded-xl bg-[#173F35] px-4 text-sm font-semibold text-white hover:bg-[#0F2C25] disabled:opacity-50"><Plus size={16} />Reserve store slot</button>
         </div>
       </div>

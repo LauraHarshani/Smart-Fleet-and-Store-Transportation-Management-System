@@ -1,15 +1,17 @@
 import { Check } from "lucide-react";
 
 const sendingStages = [
-  { id: 1, label: "Goods Prepared" },
-  { id: 2, label: "Goods Handed Over" },
-  { id: 3, label: "Received" },
+  { id: 1, label: "Awaiting Preparation" },
+  { id: 2, label: "Prepared" },
+  { id: 3, label: "In Transit" },
+  { id: 4, label: "Awaiting Handover" },
+  { id: 5, label: "Handed Over" },
 ];
 
 const receivingStages = [
-  { id: 1, label: "Goods Prepared" },
-  { id: 2, label: "In Transit" },
-  { id: 3, label: "Received" },
+  { id: 1, label: "Awaiting Receipt" },
+  { id: 2, label: "Received" },
+  { id: 3, label: "Completed" },
 ];
 
 const GoodsProgress = ({ currentStage, isReceiving = false }) => {
@@ -51,7 +53,7 @@ const GoodsProgress = ({ currentStage, isReceiving = false }) => {
             </div>
 
             <span
-              className={`mt-3 whitespace-nowrap text-center text-sm ${
+              className={`mt-3 px-1 text-center text-sm ${
                 completed || active
                   ? "font-medium text-gray-900"
                   : "text-gray-400"
