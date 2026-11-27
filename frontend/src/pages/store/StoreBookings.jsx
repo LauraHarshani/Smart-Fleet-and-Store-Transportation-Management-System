@@ -777,6 +777,8 @@ const StoreBookings = () => {
   
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const bookingsPerPage = 8;
 
   const [bookings, setBookings] = useState([]);
   const [storesList, setStoresList] = useState([]);
@@ -948,6 +950,19 @@ const StoreBookings = () => {
 
     return matchesSearch && matchesDropdownStatus && matchesButtonStatus && matchesDate;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, activeButtonFilter, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredBookings.length / bookingsPerPage);
+  const startIndex = (currentPage - 1) * bookingsPerPage;
+  const endIndex = startIndex + bookingsPerPage;
+  const currentBookings = filteredBookings.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, Math.max(totalPages, 1)));
+  }, [totalPages]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -1184,8 +1199,8 @@ const StoreBookings = () => {
           </div>
 
           <div>
-            {filteredBookings.length > 0 ? (
-              filteredBookings.map((booking) => (
+            {currentBookings.length > 0 ? (
+              currentBookings.map((booking) => (
                 <div key={booking.mongoId || booking.id} onClick={() => setSelectedBooking(booking)} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-green-50/30' : ''}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1226,15 +1241,51 @@ const StoreBookings = () => {
               </div>
             )}
             
-            <div className="p-4 flex justify-between items-center text-xs text-gray-500">
-               <span>Showing <strong>{filteredBookings.length}</strong> of <strong>{bookings.length}</strong> bookings</span>
-               <div className="flex items-center gap-1">
-                  <button className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-gray-100"><ChevronRight size={14} className="rotate-180"/></button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded bg-[#113b2e] text-white font-bold">1</button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 font-bold">2</button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 font-bold">3</button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:bg-gray-100"><ChevronRight size={14}/></button>
-               </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 p-4 pt-4">
+              <span className="text-xs text-gray-500">
+                Showing {filteredBookings.length === 0 ? 0 : startIndex + 1}
+                {" - "}
+                {Math.min(endIndex, filteredBookings.length)}
+                {" of "}
+                {filteredBookings.length} bookings
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                  disabled={currentPage === 1 || totalPages === 0}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      aria-current={currentPage === page ? "page" : undefined}
+                      className={`h-9 min-w-9 rounded-lg px-3 text-sm font-semibold transition ${
+                        currentPage === page
+                          ? "bg-[#078A68] text-white"
+                          : "border border-slate-200 text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((page) => Math.min(page + 1, totalPages))
+                  }
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </div>
