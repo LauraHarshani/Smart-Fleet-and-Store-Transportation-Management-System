@@ -1,5 +1,6 @@
 const Vehicle = require("../models/vehicle");
 const Booking = require("../models/booking");
+const { StoreBooking } = require("../models/StoreBooking");
 const Trip = require("../models/trip");
 
 // Sri Lanka timezone: UTC +05:30
@@ -403,18 +404,26 @@ const getUpcomingTrips = async (req, res) => {
         const { start, end } = getTodayRange();
         const localNow = getColomboDate();
         const currentTime = `${String(localNow.getUTCHours()).padStart(2, '0')}:${String(localNow.getUTCMinutes()).padStart(2, '0')}`;
+        const now = new Date();
 
         const trips = await Trip.find({
             status: { $nin: ["Cancelled", "Completed"] },
             $or: [
-                { date: { $gte: end } },
-                { date: { $gte: start, $lt: end }, start: { $gte: currentTime } }
+                { scheduledStartAt: { $gte: now } },
+                { status: { $in: ["In Progress", "Delayed"] } },
+                {
+                    scheduledStartAt: null,
+                    $or: [
+                        { date: { $gte: end } },
+                        { date: { $gte: start, $lt: end }, start: { $gte: currentTime } }
+                    ]
+                }
             ]
         })
-            .sort({ date: 1, start: 1 })
+            .sort({ scheduledStartAt: 1, date: 1, start: 1 })
             .limit(10)
             .select(
-                "id route origin destination date start end vehicle driver status"
+                "id route origin destination date start end vehicle driver status scheduledStartAt"
             )
             .lean();
 
@@ -439,17 +448,26 @@ const getUpcomingTrips = async (req, res) => {
 
 const getRecentBookings = async (req, res) => {
     try {
-        const bookings = await Booking.find({})
+        const bookings = await StoreBooking.find({})
             .sort({ createdAt: -1 })
-            .limit(10)
+            .limit(5)
             .select(
-                "id bookingType pickupStore destinationStore date status priority totalItems createdAt"
+                "bookingCode pickupStore destinationStore requestedPickupDate status items createdAt"
             )
+            .populate("pickupStore", "name")
+            .populate("destinationStore", "name")
             .lean();
 
         res.status(200).json({
             success: true,
-            data: bookings
+            data: bookings.map((booking) => ({
+                id: booking.bookingCode || booking._id.toString(),
+                store: `${booking.pickupStore?.name || "—"} → ${booking.destinationStore?.name || "—"}`,
+                totalItems: booking.items?.length || 0,
+                date: booking.requestedPickupDate,
+                status: booking.status,
+                createdAt: booking.createdAt
+            }))
         });
 
     } catch (error) {

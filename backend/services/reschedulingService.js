@@ -41,6 +41,7 @@ const rescheduleTripSlots = async (tripId, delayMinutes) => {
       const proposedSlots = slots.map((slot) => ({
         slot,
         store: slot.store,
+      dockNumber: slot.dockNumber,
         startAt: new Date(slot.startAt.getTime() + delayMilliseconds),
         endAt: new Date(slot.endAt.getTime() + delayMilliseconds),
       }));

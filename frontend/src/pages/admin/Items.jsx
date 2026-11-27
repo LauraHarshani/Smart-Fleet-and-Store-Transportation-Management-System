@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { Search, Plus, Edit2, Trash2, Box, CheckCircle2, ArrowLeft, RotateCcw, Download, ChevronDown, Shield, AlertTriangle, Camera, Leaf, Layers, Thermometer, Droplets, FileArchive, Activity, Snowflake, MapPin } from 'lucide-react';
 import { getAllItems, createItem, updateItem, deleteItem } from '../../services/itemService';
 
@@ -39,6 +39,7 @@ export default function Items() {
   const [itemName, setItemName] = useState('');
   const [freightCat, setFreightCat] = useState('');
   const [uom, setUom] = useState('');
+  const [inventoryQuantity, setInventoryQuantity] = useState('0');
   const [grossWeight, setGrossWeight] = useState('');
   const [itemStatus, setItemStatus] = useState('Active');
   const [itemImage, setItemImage] = useState(null);
@@ -50,10 +51,6 @@ export default function Items() {
   const [fragile, setFragile] = useState(false);
 
   const fileInputRef = useRef(null);
-
-  useEffect(() => {
-    loadItemsData();
-  }, []);
 
   const buildNextItemCode = (existingList = items) => {
     const usedCodes = new Set(
@@ -68,7 +65,7 @@ export default function Items() {
     return `ITM-${Date.now().toString().slice(-4)}`;
   };
 
-  const normalizeItemRecord = (raw, idx = 0) => {
+  const normalizeItemRecord = useCallback((raw, idx = 0) => {
     const codeText = raw.code || raw.id || `ITM-${1001 + idx}`;
     const catText = raw.category || 'Dry Grocery / Export';
     const uomText = raw.unitOfMeasure || raw.uom || 'Cartons / Cases (CTN)';
@@ -86,15 +83,16 @@ export default function Items() {
       category: catText,
       uom: uomText,
       weightKg: weightNum,
+      inventoryQuantity: Number.isInteger(Number(raw.inventoryQuantity)) ? Number(raw.inventoryQuantity) : 0,
       weight: `${weightNum.toFixed(1)} kg`,
       status: statusText,
       statusColor: STATUS_STYLE_MAP[statusText] || STATUS_STYLE_MAP['Active'],
       categoryColor: getCategoryBadgeStyle(catText),
       image: raw.image || null
     };
-  };
+  }, []);
 
-  const loadItemsData = async () => {
+  const loadItemsData = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getAllItems().catch((err) => {
@@ -105,7 +103,12 @@ export default function Items() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [normalizeItemRecord]);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => { void loadItemsData(); }, 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [loadItemsData]);
 
   const filteredItems = items.filter((i) => {
     const matchesSearch =
@@ -149,6 +152,7 @@ export default function Items() {
     setItemName('');
     setFreightCat('');
     setUom('');
+    setInventoryQuantity('0');
     setGrossWeight('');
     setItemStatus('Active');
     setItemImage(null);
@@ -161,6 +165,7 @@ export default function Items() {
     setItemName(item.name);
     setFreightCat(item.category);
     setUom(item.uom);
+    setInventoryQuantity(String(item.inventoryQuantity ?? 0));
     setGrossWeight(String(item.weightKg ?? String(item.weight || '').replace(/[^\d.]/g, '')));
     setItemStatus(item.status || 'Active');
     setItemImage(item.image || null);
@@ -200,6 +205,7 @@ export default function Items() {
       description: `${catVal} — Standard freight catalog item`,
       category: catVal,
       unitOfMeasure: uom,
+      inventoryQuantity: Number(inventoryQuantity),
       weightKg: weightVal,
       isHazardous: catVal.toLowerCase().includes('hazmat') || catVal.toLowerCase().includes('chem'),
       status: 'Active',
@@ -226,6 +232,7 @@ export default function Items() {
       name: itemName.trim(),
       category: freightCat,
       unitOfMeasure: uom,
+      inventoryQuantity: Number(inventoryQuantity),
       weightKg: weightVal,
       status: itemStatus,
       handlingConstraints: {
@@ -253,9 +260,9 @@ export default function Items() {
   };
 
   const handleExportCSV = () => {
-    const headers = ['Item Code', 'Name', 'Description', 'Category', 'UoM', 'Weight', 'Status'];
+    const headers = ['Item Code', 'Name', 'Description', 'Category', 'UoM', 'Inventory Quantity', 'Weight', 'Status'];
     const csvRows = filteredItems.map((i) => {
-      return [i.id, `"${i.name}"`, `"${i.description}"`, `"${i.category}"`, `"${i.uom}"`, `"${i.weight}"`, `"${i.status}"`].join(',');
+      return [i.id, `"${i.name}"`, `"${i.description}"`, `"${i.category}"`, `"${i.uom}"`, i.inventoryQuantity, `"${i.weight}"`, `"${i.status}"`].join(',');
     });
     const csvContent = [headers.join(','), ...csvRows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -402,6 +409,12 @@ export default function Items() {
                   <p className="text-[9px] text-gray-500 mt-2 font-medium leading-relaxed pr-6">Standard freight manifest packaging quantifier and stacking calculation unit.</p>
                 </div>
 
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold text-gray-900 mb-2">Initial Inventory Quantity <span className="text-red-500">*</span></label>
+                  <input type="number" min="0" step="1" value={inventoryQuantity} onChange={(e) => setInventoryQuantity(e.target.value)} placeholder="0" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none focus:border-[#0fa979] shadow-sm transition-all" required />
+                  <p className="text-[9px] text-gray-500 mt-2 font-medium">Enter current stock in the selected unit of measure. Store users use this figure when confirming goods preparation.</p>
+                </div>
+
               </div>
 
               <div className="mt-10 bg-[#f0f9f4] p-4 rounded-xl border border-[#0fa979]/20 flex items-start gap-3">
@@ -533,6 +546,12 @@ export default function Items() {
                          <span className="bg-gray-100 text-gray-500 font-bold text-[10px] px-2 py-1 rounded">KG</span>
                       </div>
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-[11px] font-bold text-gray-900 mb-2"><span>Available Inventory Quantity</span></label>
+                    <input type="number" min="0" step="1" value={inventoryQuantity} onChange={(e) => setInventoryQuantity(e.target.value)} className="w-full p-3 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-900 outline-none focus:border-[#0fa979] shadow-sm" required />
+                    <p className="text-[9px] text-gray-400 mt-2 font-medium">Units currently available for store booking preparation.</p>
                   </div>
 
                   <div>
@@ -872,6 +891,7 @@ export default function Items() {
               <th className="py-5 px-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">ITEM NAME & DESCRIPTION</th>
               <th className="py-5 px-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center">CATEGORY</th>
               <th className="py-5 px-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center leading-tight">UNIT OF<br/>MEASURE</th>
+              <th className="py-5 px-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center leading-tight">INVENTORY<br/>QUANTITY</th>
               <th className="py-5 px-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center leading-tight">WEIGHT<br/>/<br/>DENSITY</th>
               <th className="py-5 px-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center w-[120px]">STATUS</th>
               <th className="py-5 px-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center w-[100px]">ACTIONS</th>
@@ -879,9 +899,9 @@ export default function Items() {
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading ? (
-              <tr><td colSpan="7" className="py-10 text-center text-gray-500 text-[13px] font-medium">Loading items from database...</td></tr>
+              <tr><td colSpan="8" className="py-10 text-center text-gray-500 text-[13px] font-medium">Loading items from database...</td></tr>
             ) : paginatedItems.length === 0 ? (
-              <tr><td colSpan="7" className="py-10 text-center text-gray-500 text-[13px] font-medium">No items found matching your filters.</td></tr>
+              <tr><td colSpan="8" className="py-10 text-center text-gray-500 text-[13px] font-medium">No items found matching your filters.</td></tr>
             ) : (
               paginatedItems.map((i) => (
                 <tr key={i._id || i.id} className="hover:bg-gray-50/50 transition-colors">
@@ -916,6 +936,10 @@ export default function Items() {
                             </>
                         ) : i.uom}
                      </div>
+                  </td>
+                  <td className="py-5 px-6 text-center">
+                    <div className="font-bold text-[#113b2e] text-[12px]">{Number(i.inventoryQuantity || 0).toLocaleString()}</div>
+                    <div className="mt-1 max-w-28 truncate text-[9px] text-gray-400" title={i.uom}>{i.uom}</div>
                   </td>
                   <td className="py-5 px-6 text-center">
                     <div className="font-bold text-gray-900 text-[11px]">{i.weight}</div>

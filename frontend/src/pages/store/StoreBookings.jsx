@@ -152,10 +152,9 @@ const mapBackendStatusToUi = (backendStatus) => {
 // 1. CREATE / EDIT BOOKING COMPONENT (FE-3)
 // ==========================================
 const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], currentUserId, assignedStoreId, onSaved, onSuccess }) => {
-  const pickupStoresList = assignedStoreId
-    ? storesList.filter((store) => store._id === assignedStoreId)
-    : storesList;
-  const defaultPickupStore = pickupStoresList[0];
+  const pickupStoresList = storesList;
+  const assignedStore = storesList.find((store) => store._id === assignedStoreId);
+  const defaultPickupStore = assignedStore || pickupStoresList[0];
 
   const [formData, setFormData] = useState({
     pickupStoreId: defaultPickupStore?._id || '',
@@ -174,17 +173,21 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
 
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const isInboundRoute = Boolean(assignedStoreId && formData.pickupStoreId !== assignedStoreId);
+  const destinationStoresList = isInboundRoute
+    ? storesList.filter((store) => store._id === assignedStoreId)
+    : storesList.filter((store) => store._id !== formData.pickupStoreId);
 
   useEffect(() => {
     if (!editData && pickupStoresList.length > 0 && !formData.pickupStoreId) {
-      const first = pickupStoresList[0];
+      const first = defaultPickupStore;
       setFormData((prev) => ({
         ...prev,
         pickupStoreId: first._id,
         pickupStore: first.name,
       }));
     }
-  }, [storesList, assignedStoreId, editData, formData.pickupStoreId]);
+  }, [storesList, assignedStoreId, editData, formData.pickupStoreId, defaultPickupStore]);
 
   useEffect(() => {
     if (editData) {
@@ -299,7 +302,8 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.destinationStore) newErrors.destinationStore = 'Required';
+    if (!formData.pickupStoreId) newErrors.pickupStore = 'Required';
+    if (!(formData.destinationStoreId || formData.destinationStore)) newErrors.destinationStore = 'Required';
     if (!formData.dispatchDate) newErrors.dispatchDate = 'Required';
     if (!formData.timeSlot) newErrors.timeSlot = 'Required';
 
@@ -409,7 +413,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
     storesList.find((s) => s._id === formData.pickupStoreId || s.name === formData.pickupStore) ||
     storesList[0];
   const selectedDestObj = storesList.find(
-    (s) => s._id === formData.destinationStore || s.name === formData.destinationStore
+    (s) => s._id === (formData.destinationStoreId || formData.destinationStore) || s.name === formData.destinationStore
   );
 
   return (
@@ -464,13 +468,17 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                       const val = e.target.value;
                       const found = storesList.find((s) => s._id === val || s.name === val);
                       const nextPickupId = found?._id || val;
-                      setFormData((prev) => ({
-                        ...prev,
-                        pickupStoreId: nextPickupId,
-                        pickupStore: found ? found.name : val,
-                        destinationStore: prev.destinationStore === nextPickupId ? '' : prev.destinationStore,
-                        destinationStoreId: prev.destinationStoreId === nextPickupId ? '' : prev.destinationStoreId,
-                      }));
+                      const nextIsInbound = Boolean(assignedStoreId && nextPickupId !== assignedStoreId);
+                      setFormData((prev) => {
+                        const destinationIsPickup = prev.destinationStoreId === nextPickupId || prev.destinationStore === nextPickupId;
+                        return {
+                          ...prev,
+                          pickupStoreId: nextPickupId,
+                          pickupStore: found ? found.name : val,
+                          destinationStoreId: nextIsInbound ? assignedStoreId : (destinationIsPickup ? '' : prev.destinationStoreId),
+                          destinationStore: nextIsInbound ? assignedStoreId : (destinationIsPickup ? '' : prev.destinationStore),
+                        };
+                      });
                     }}
                     className="w-full p-3.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600 outline-none appearance-none"
                   >
@@ -482,6 +490,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                   </select>
                   <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
+                {errors.pickupStore && <p className="text-red-500 text-xs mt-1">{errors.pickupStore}</p>}
                 <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
                   <span className="w-1 h-1 rounded-full bg-green-500"></span> {selectedPickupObj?.address || selectedPickupObj?.region || 'Authorized Store Hub'}
                 </p>
@@ -493,32 +502,34 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                 </label>
                 <div className="relative">
                   <select
-                    value={formData.destinationStore}
+                    value={formData.destinationStoreId || formData.destinationStore}
                     onChange={(e) => {
                       const val = e.target.value;
                       const found = storesList.find((s) => s._id === val || s.name === val);
-                      setFormData({
-                        ...formData,
+                      setFormData((prev) => ({
+                        ...prev,
                         destinationStoreId: found?._id || val,
-                        destinationStore: val,
-                      });
+                        destinationStore: found?._id || val,
+                      }));
                     }}
-                    className={`w-full p-3.5 border rounded-lg text-sm bg-white outline-none appearance-none focus:ring-1 focus:ring-green-700 ${errors.destinationStore ? 'border-red-500' : 'border-gray-200'}`}
+                    disabled={isInboundRoute}
+                    className={`w-full p-3.5 border rounded-lg text-sm outline-none appearance-none focus:ring-1 focus:ring-green-700 disabled:bg-gray-100 disabled:text-gray-500 ${errors.destinationStore ? 'border-red-500' : 'border-gray-200 bg-white'}`}
                   >
                     <option value="">Select destination hub...</option>
-                    {storesList
-                      .filter((st) => st._id !== formData.pickupStoreId && st.name !== formData.pickupStore)
-                      .map((st) => (
-                        <option key={st._id} value={st._id}>
-                          {st.name}
-                        </option>
-                      ))}
+                    {destinationStoresList.map((st) => (
+                      <option key={st._id} value={st._id}>
+                        {st.name}
+                      </option>
+                    ))}
                   </select>
                   <ChevronRight className="absolute right-4 top-4 rotate-90 text-gray-400" size={16} />
                 </div>
                 {errors.destinationStore && <p className="text-red-500 text-xs mt-1">{errors.destinationStore}</p>}
                 <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-green-500"></span> {selectedDestObj?.address || selectedDestObj?.region || 'Authorized Destination Store'}
+                  <span className="w-1 h-1 rounded-full bg-green-500"></span>
+                  {isInboundRoute
+                    ? `Inbound bookings are delivered to your assigned store${selectedDestObj?.address || selectedDestObj?.region ? ` · ${selectedDestObj.address || selectedDestObj.region}` : ''}`
+                    : selectedDestObj?.address || selectedDestObj?.region || 'Choose the destination store'}
                 </p>
               </div>
             </div>
@@ -528,7 +539,7 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
                 <div className="flex gap-4 items-center">
                   <div className="bg-green-100 w-8 h-8 flex items-center justify-center rounded-md text-green-800 font-bold text-sm">A</div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-0.5">Inter-Store Route <span className="text-[9px] bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Verified</span></p>
+                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-0.5">{isInboundRoute ? 'Inbound to your store' : assignedStoreId ? 'Outbound from your store' : 'Inter-Store Route'} <span className="text-[9px] bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Verified</span></p>
                     <p className="text-[11px] text-gray-500">{selectedPickupObj?.name || ''} → {selectedDestObj?.name || ''}</p>
                   </div>
                 </div>
@@ -766,6 +777,8 @@ const StoreBookings = () => {
   
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const bookingsPerPage = 8;
 
   const [bookings, setBookings] = useState([]);
   const [storesList, setStoresList] = useState([]);
@@ -823,8 +836,8 @@ const StoreBookings = () => {
       cargo: lineSummaries.join(' & '),
       consignments: Array.isArray(b.items) ? b.items.length : 0,
       distance: b.distanceKm ? `${b.distanceKm} km` : '',
-      driver: b.assignedTrip?.driver?.name || '',
-      vehicle: b.assignedVehicle?.vehicleId || b.assignedVehicle?.plateNumber || '',
+      driver: b.assignedTrip?.driver?.name || b.assignedTrip?.driver || b.assignedVehicle?.assignedDriverName || '',
+      vehicle: b.assignedVehicle?.registrationNumber || b.assignedVehicle?.vehicleId || b.assignedVehicle?.plateNumber || '',
       totalWeight: `${computedWeight.toLocaleString()} kg`,
       history: formattedHistory,
       rawBooking: b,
@@ -937,6 +950,19 @@ const StoreBookings = () => {
 
     return matchesSearch && matchesDropdownStatus && matchesButtonStatus && matchesDate;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, activeButtonFilter, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredBookings.length / bookingsPerPage);
+  const startIndex = (currentPage - 1) * bookingsPerPage;
+  const endIndex = startIndex + bookingsPerPage;
+  const currentBookings = filteredBookings.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, Math.max(totalPages, 1)));
+  }, [totalPages]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -1173,8 +1199,8 @@ const StoreBookings = () => {
           </div>
 
           <div>
-            {filteredBookings.length > 0 ? (
-              filteredBookings.map((booking) => (
+            {currentBookings.length > 0 ? (
+              currentBookings.map((booking) => (
                 <div key={booking.mongoId || booking.id} onClick={() => setSelectedBooking(booking)} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-green-50/30' : ''}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1215,15 +1241,51 @@ const StoreBookings = () => {
               </div>
             )}
             
-            <div className="p-4 flex justify-between items-center text-xs text-gray-500">
-               <span>Showing <strong>{filteredBookings.length}</strong> of <strong>{bookings.length}</strong> bookings</span>
-               <div className="flex items-center gap-1">
-                  <button className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-gray-100"><ChevronRight size={14} className="rotate-180"/></button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded bg-[#113b2e] text-white font-bold">1</button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 font-bold">2</button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 font-bold">3</button>
-                  <button className="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:bg-gray-100"><ChevronRight size={14}/></button>
-               </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 p-4 pt-4">
+              <span className="text-xs text-gray-500">
+                Showing {filteredBookings.length === 0 ? 0 : startIndex + 1}
+                {" - "}
+                {Math.min(endIndex, filteredBookings.length)}
+                {" of "}
+                {filteredBookings.length} bookings
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                  disabled={currentPage === 1 || totalPages === 0}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      aria-current={currentPage === page ? "page" : undefined}
+                      className={`h-9 min-w-9 rounded-lg px-3 text-sm font-semibold transition ${
+                        currentPage === page
+                          ? "bg-[#078A68] text-white"
+                          : "border border-slate-200 text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((page) => Math.min(page + 1, totalPages))
+                  }
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1320,12 +1382,12 @@ const StoreBookings = () => {
                                 </div>
                                 <div>
                                   <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.driver}</p>
-                                  <p className="text-[10px] text-gray-500">{selectedRaw.assignedTrip?.driver?.phone || ''}</p>
+                                  <p className="text-[10px] text-gray-500">{selectedRaw.assignedVehicle?.assignedDriver?.name || selectedRaw.assignedVehicle?.assignedDriverName || selectedRaw.assignedTrip?.driver || ''}</p>
                                 </div>
                              </div>
                              <div className="text-right">
                                 <p className="text-xs font-bold text-gray-900 leading-none mb-1">{selectedBooking.vehicle}</p>
-                                <p className="text-[10px] text-gray-500">{selectedRaw.assignedVehicle?.vehicleType || ''}</p>
+                                <p className="text-[10px] text-gray-500">{selectedRaw.assignedVehicle?.type || selectedRaw.assignedVehicle?.vehicleType || ''}</p>
                              </div>
                           </div>
                         )}

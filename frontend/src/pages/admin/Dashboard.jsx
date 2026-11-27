@@ -334,7 +334,7 @@ const LiveTrackingMap = () => (
 
 // UPCOMING TRIPS TABLE
 
-const UpcomingTrips = ({ upcomingTrips }) => (
+const UpcomingTrips = ({ upcomingTrips, error }) => (
   <Card className="p-5 h-full">
     <CardHeading
       title="Upcoming Trips"
@@ -345,7 +345,7 @@ const UpcomingTrips = ({ upcomingTrips }) => (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[430px]">
         <tbody>
-          {upcomingTrips.map((trip) => (
+          {upcomingTrips.length ? upcomingTrips.map((trip) => (
             <tr
               key={trip.id}
               className="border-t border-[#E2E8E0] hover:bg-[#FAFCFA]"
@@ -376,7 +376,15 @@ const UpcomingTrips = ({ upcomingTrips }) => (
                 <StatusBadge status={trip.status} />
               </td>
             </tr>
-          ))}
+          )) : (
+            <tr>
+              <td colSpan={4} className="border-t border-[#E2E8E0] px-3 py-8 text-center">
+                <p className="text-xs font-semibold text-gray-600">{error ? 'Upcoming trips could not be loaded' : 'No upcoming trips scheduled'}</p>
+                <p className="mt-1 text-[10px] text-gray-500">{error || 'Trips scheduled in the future will appear here.'}</p>
+                {!error && <Link to="/trip-planning" className="mt-2 inline-block text-[10px] font-semibold text-[#07865F] hover:underline">Plan a trip</Link>}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -533,12 +541,13 @@ const QuickActions = () => (
 const Dashboard = () => {
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState({ stats, tripStatus: [], utilization: [], upcomingTrips: [], recentBookings: [] });
+  const [upcomingTripsError, setUpcomingTripsError] = useState('');
 
   useEffect(() => {
     let active = true;
     const loadDashboard = async () => {
       try {
-        const [kpiResponse, statusResponse, utilizationResponse, tripsResponse, bookingsResponse] = await Promise.all([
+        const [kpiResult, statusResult, utilizationResult, tripsResult, bookingsResult] = await Promise.allSettled([
           api.get('/admin/dashboard/kpis'),
           api.get('/admin/dashboard/trip-status'),
           api.get('/admin/dashboard/vehicle-utilization'),
@@ -547,25 +556,38 @@ const Dashboard = () => {
         ]);
         if (!active) return;
 
-        const kpis = kpiResponse.data.data;
+        const kpiResponse = kpiResult.status === 'fulfilled' ? kpiResult.value : null;
+        const statusResponse = statusResult.status === 'fulfilled' ? statusResult.value : null;
+        const utilizationResponse = utilizationResult.status === 'fulfilled' ? utilizationResult.value : null;
+        const tripsResponse = tripsResult.status === 'fulfilled' ? tripsResult.value : null;
+        const bookingsResponse = bookingsResult.status === 'fulfilled' ? bookingsResult.value : null;
+        const kpis = kpiResponse?.data?.data || {};
+        const statusList = statusResponse?.data?.data || [];
+        const utilizationList = utilizationResponse?.data?.data || [];
+        const tripList = tripsResponse?.data?.data || [];
+        const bookingList = bookingsResponse?.data?.data || [];
+        setUpcomingTripsError(tripsResult.status === 'rejected'
+          ? (tripsResult.reason.response?.data?.message || 'Check your connection and refresh the dashboard.')
+          : '');
+
         const statusColors = { Completed: '#087653', 'In Progress': '#B5D6A7', Pending: '#FFB765', Delayed: '#FF4848', Scheduled: '#4F8FC0', Assigned: '#6B8E74', Draft: '#94A3B8' };
         const weeklyValues = Array.from({ length: 4 }, (_, index) => {
-          const samples = utilizationResponse.data.data.map((vehicle) => vehicle.weeklyUtilization?.[index]?.utilization ?? 0);
+          const samples = utilizationList.map((vehicle) => vehicle.weeklyUtilization?.[index]?.utilization ?? 0);
           return { label: `Week ${index + 1}`, value: samples.length ? Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length) : 0 };
         });
         const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
         setDashboardData({
           stats: [
-            { ...stats[0], value: String(kpis.activeVehicles) },
-            { ...stats[1], value: String(kpis.todayTrips) },
-            { ...stats[2], value: String(kpis.pendingBookings) },
-            { ...stats[3], value: String(kpis.delayedTrips).padStart(2, '0') },
-            { ...stats[4], value: String(kpis.completedTrips).padStart(2, '0') },
+            { ...stats[0], value: String(kpis.activeVehicles ?? '—') },
+            { ...stats[1], value: String(kpis.todayTrips ?? '—') },
+            { ...stats[2], value: String(kpis.pendingBookings ?? '—') },
+            { ...stats[3], value: kpis.delayedTrips === undefined ? '—' : String(kpis.delayedTrips).padStart(2, '0') },
+            { ...stats[4], value: kpis.completedTrips === undefined ? '—' : String(kpis.completedTrips).padStart(2, '0') },
           ],
-          tripStatus: statusResponse.data.data.map((item) => ({ label: item.status, count: item.count, color: statusColors[item.status] || '#64748B' })),
+          tripStatus: statusList.map((item) => ({ label: item.status, count: item.count, color: statusColors[item.status] || '#64748B' })),
           utilization: weeklyValues,
-          upcomingTrips: tripsResponse.data.data.map((trip) => ({ ...trip, time: trip.start || formatDate(trip.date) })),
-          recentBookings: bookingsResponse.data.data.map((booking) => ({ ...booking, date: formatDate(booking.date) })),
+          upcomingTrips: tripList.map((trip) => ({ ...trip, time: trip.start || formatDate(trip.scheduledStartAt || trip.date) })),
+          recentBookings: bookingList.map((booking) => ({ ...booking, date: formatDate(booking.date) })),
         });
       } catch (error) {
         console.error('Unable to load admin dashboard:', error);
@@ -607,7 +629,7 @@ const Dashboard = () => {
       {/* LIVE TRACKING + UPCOMING TRIPS */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
         <LiveTrackingMap />
-        <UpcomingTrips upcomingTrips={dashboardData.upcomingTrips} />
+        <UpcomingTrips upcomingTrips={dashboardData.upcomingTrips} error={upcomingTripsError} />
       </section>
 
       {/* RECENT BOOKINGS + QUICK ACTIONS */}

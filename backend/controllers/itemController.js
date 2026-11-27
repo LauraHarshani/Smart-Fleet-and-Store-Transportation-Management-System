@@ -59,6 +59,11 @@ const createItem = async (req, res) => {
       return res.status(400).json({ message: 'Item name and unit of measure are required.' });
     }
 
+    const inventoryQuantity = payload.inventoryQuantity === undefined ? 0 : Number(payload.inventoryQuantity);
+    if (!Number.isInteger(inventoryQuantity) || inventoryQuantity < 0) {
+      return res.status(400).json({ message: 'Inventory quantity must be a non-negative whole number.' });
+    }
+
     const category = (payload.category || 'Dry Grocery / Export').trim();
     const isHazardous = payload.isHazardous !== undefined
       ? Boolean(payload.isHazardous)
@@ -69,6 +74,7 @@ const createItem = async (req, res) => {
       description: (payload.description || 'Registered master catalog SKU').trim(),
       category,
       unitOfMeasure: uom,
+      inventoryQuantity,
       weightKg: Math.max(0, Number(payload.weightKg) || 0),
       isHazardous,
       status: payload.status || 'Active',
@@ -135,6 +141,12 @@ const updateItem = async (req, res) => {
     if (updates.weightKg !== undefined) {
       updates.weightKg = Math.max(0, Number(updates.weightKg) || 0);
     }
+    if (updates.inventoryQuantity !== undefined) {
+      updates.inventoryQuantity = Number(updates.inventoryQuantity);
+      if (!Number.isInteger(updates.inventoryQuantity) || updates.inventoryQuantity < 0) {
+        return res.status(400).json({ message: 'Inventory quantity must be a non-negative whole number.' });
+      }
+    }
     if (updates.category) {
       updates.isHazardous = updates.category.toLowerCase().includes('hazmat') || updates.category.toLowerCase().includes('chem');
     }
@@ -153,6 +165,9 @@ const updateItem = async (req, res) => {
   } catch (error) {
     if (error.code === 11000) {
       return res.status(400).json({ message: 'Item code / SKU already exists.' });
+    }
+    if (error.name === 'ValidationError' || error.name === 'CastError') {
+      return res.status(400).json({ message: error.message });
     }
     res.status(500).json({ message: 'Error updating item', error: error.message });
   }

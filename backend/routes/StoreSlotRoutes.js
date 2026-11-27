@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
   createSlot,
+  getAvailableDocks,
   getSlots,
   getSlotById,
   updateSlot,
@@ -24,6 +25,9 @@ router.use(storeScope);
 
 // Create a reservation
 router.post("/", createSlot);
+
+// Check which numbered docks are free for a store and time window
+router.get("/availability/docks", getAvailableDocks);
 
 // Retrieve reservations
 router.get("/", getSlots);

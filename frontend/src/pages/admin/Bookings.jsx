@@ -1,5 +1,5 @@
 import { generateBookingPDF } from "../../utils/generateBookingPDF";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search,
   Clock,
@@ -20,157 +20,63 @@ import {
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
-// Sample booking data
-const initialBookings = [
-  {
-    id: "BK-10492",
-    store: "Colombo Main Store",
-    pickupStore: "Galle Warehouse Hub",
-    destinationStore: "Colombo Main Store",
-    pickupAddress: "Bay 02, Galle",
-    destinationAddress: "248 Galle Road, Kollupitiya, Colombo 03",
-    date: "Today",
-    scheduledTime: "14:30 LKT",
-    createdAt: "Oct 01, 2026 at 10:42 LKT",
+import api from "../../services/api";
+
+const mapBooking = (booking) => {
+  const pickup = booking.pickupStore || {};
+  const destination = booking.destinationStore || {};
+  const pickupName = pickup.name || "Pickup store";
+  const destinationName = destination.name || "Destination store";
+  const totalWeightKg = (booking.items || []).reduce(
+    (total, line) => total + Number(line.item?.weightKg || 0) * Number(line.quantity || 0),
+    0,
+  );
+  const totalQuantity = (booking.items || []).reduce((total, line) => total + Number(line.quantity || 0), 0);
+  const pickupDate = booking.requestedPickupDate ? new Date(booking.requestedPickupDate) : null;
+
+  return {
+    mongoId: booking._id,
+    id: booking.bookingCode || booking._id,
+    store: destinationName,
+    pickupStore: pickupName,
+    destinationStore: destinationName,
+    pickupAddress: pickup.address || pickup.location?.address || "Address not provided",
+    destinationAddress: destination.address || destination.location?.address || "Address not provided",
+    date: pickupDate && !Number.isNaN(pickupDate.getTime()) ? pickupDate.toLocaleDateString() : "Date not set",
+    scheduledTime: booking.requestedTimeWindow?.startTime || "Time not set",
+    createdAt: booking.createdAt ? new Date(booking.createdAt).toLocaleString() : "",
     priority: "Normal",
-    deliveryType: "Expedited",
-    distance: "24.6 km",
-    transitTime: "38 mins",
-    vehicle: "Tractor #TR-902",
-    status: "Pending",
-    weight: "1,420 kg",
-    totalItems: 245,
-    items: [
-      {
-        name: "Ceylon Tea & Spices Crates",
-        quantity: "120 Units (15 Cases)",
-        weight: "680 kg",
-        description: "Ventilated Hold • Temp: 22°C",
-      },
-      {
-        name: "Chilled Dairy & Produce Packs",
-        quantity: "85 Boxes",
-        weight: "490 kg",
-        description: "Refrigerated Container • Pallet Set #2",
-      },
-      {
-        name: "Bakery & Dry Provisions",
-        quantity: "40 Totes",
-        weight: "250 kg",
-        description: "Ambient Hold • Rack Level 1",
-      },
-    ],
-  },
-  {
-    id: "BK-10488",
-    store: "Kandy Branch",
-    pickupStore: "Colombo Main Store",
-    destinationStore: "Kandy Branch",
-    pickupAddress: "Colombo Distribution Centre",
-    destinationAddress: "Kandy Main Road, Kandy",
-    date: "Today",
-    scheduledTime: "16:00 LKT",
-    createdAt: "Oct 02, 2026 at 09:15 LKT",
-    priority: "Normal",
-    deliveryType: "Standard",
-    distance: "115 km",
-    transitTime: "3 hrs 20 mins",
-    vehicle: "Not Assigned",
-    status: "Pending",
-    weight: "890 kg",
-    totalItems: 180,
-    items: [
-      {
-        name: "Packaged Food Supplies",
-        quantity: "100 Boxes",
-        weight: "540 kg",
-        description: "Ambient Hold • Standard Storage",
-      },
-      {
-        name: "Beverage Crates",
-        quantity: "80 Crates",
-        weight: "350 kg",
-        description: "Standard Hold • Rack Level 2",
-      },
-    ],
-  },
-  {
-    id: "BK-10485",
-    store: "Galle Warehouse",
-    pickupStore: "Kandy Branch",
-    destinationStore: "Galle Warehouse",
-    pickupAddress: "Kandy Distribution Centre",
-    destinationAddress: "Galle Warehouse, Galle",
-    date: "Tomorrow",
-    scheduledTime: "09:00 LKT",
-    createdAt: "Oct 02, 2026 at 11:30 LKT",
-    priority: "High",
-    deliveryType: "Standard",
-    distance: "180 km",
-    transitTime: "4 hrs 10 mins",
-    vehicle: "Not Assigned",
-    status: "In Review",
-    weight: "2,110 kg",
-    totalItems: 320,
-    items: [
-      {
-        name: "Grocery Supply Packages",
-        quantity: "200 Packages",
-        weight: "1,300 kg",
-        description: "Ambient Hold • Standard Storage",
-      },
-      {
-        name: "Household Products",
-        quantity: "120 Boxes",
-        weight: "810 kg",
-        description: "Standard Hold • Pallet Set #3",
-      },
-    ],
-  },
-  {
-    id: "BK-10479",
-    store: "Colombo Main Store",
-    pickupStore: "Galle Warehouse",
-    destinationStore: "Colombo Main Store",
-    pickupAddress: "Galle Warehouse, Galle",
-    destinationAddress: "Colombo Main Store, Colombo",
-    date: "Tomorrow",
-    scheduledTime: "11:30 LKT",
-    createdAt: "Oct 03, 2026 at 08:20 LKT",
-    priority: "Normal",
-    deliveryType: "Standard",
-    distance: "120 km",
-    transitTime: "3 hrs",
-    vehicle: "Not Assigned",
-    status: "Pending",
-    weight: "640 kg",
-    totalItems: 95,
-    items: [
-      {
-        name: "Fresh Produce",
-        quantity: "55 Crates",
-        weight: "390 kg",
-        description: "Fresh Goods • Temperature Controlled",
-      },
-      {
-        name: "Dry Goods",
-        quantity: "40 Boxes",
-        weight: "250 kg",
-        description: "Ambient Hold • Standard Storage",
-      },
-    ],
-  },
-];
+    deliveryType: "Store transfer",
+    distance: "—",
+    transitTime: "—",
+    vehicle: booking.assignedVehicle?.registrationNumber || "Not Assigned",
+    backendStatus: booking.status,
+    status: booking.status,
+    weight: `${totalWeightKg.toLocaleString()} kg`,
+    totalItems: totalQuantity,
+    items: (booking.items || []).map((line) => {
+      const quantity = Number(line.quantity) || 0;
+      const lineWeight = Number(line.item?.weightKg || 0) * quantity;
+      return {
+        name: line.item?.name || "Item",
+        quantity: `${quantity} ${line.unit || "units"}`,
+        weight: `${lineWeight.toLocaleString()} kg`,
+        description: line.item?.description || "",
+      };
+    }),
+    reviewerNote: booking.reviewNote || "",
+  };
+};
 
 const statusStyles = {
-  Pending: "bg-amber-50 text-amber-700",
-  "In Review": "bg-sky-50 text-sky-700",
+  Draft: "bg-gray-100 text-gray-600",
+  Submitted: "bg-sky-50 text-sky-700",
   Approved: "bg-green-50 text-green-700",
   Rejected: "bg-red-50 text-red-700",
   "Changes Requested": "bg-orange-50 text-orange-700",
 };
 
-const tabs = ["All", "Pending", "In Review"];
+const tabs = ["All", "Submitted", "Changes Requested"];
 
 function StatusBadge({ status }) {
   return (
@@ -247,12 +153,11 @@ function InfoCard({ icon: Icon, label, value, description }) {
   );
 }
 
-function BookingDetails({ booking, onStatusChange }) {
-  const [reviewNote, setReviewNote] = useState("");
+function BookingDetails({ booking, onStatusChange, saving }) {
+  const [reviewNote, setReviewNote] = useState(booking.reviewerNote || "");
 
   const handleAction = (status) => {
-    onStatusChange(booking.id, status, reviewNote);
-    setReviewNote("");
+    onStatusChange(booking, status, reviewNote);
   };
 
   return (
@@ -435,7 +340,7 @@ function BookingDetails({ booking, onStatusChange }) {
       <div className="mt-5 grid grid-cols-1 gap-2 border-t border-gray-100 pt-4 sm:grid-cols-3">
         <button
           type="button"
-          disabled={booking.status === "Approved"}
+          disabled={booking.backendStatus !== "Submitted" || saving}
           onClick={() => handleAction("Approved")}
           className="flex items-center justify-center gap-2 rounded-lg bg-[#16A34A] px-3 py-3 text-sm font-semibold text-white transition hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -445,7 +350,7 @@ function BookingDetails({ booking, onStatusChange }) {
 
         <button
           type="button"
-          disabled={booking.status === "Approved" || booking.status === "Rejected"}
+          disabled={booking.backendStatus !== "Submitted" || saving}
           onClick={() => handleAction("Changes Requested")}
           className="flex items-center justify-center gap-2 rounded-lg bg-[#E78300] px-3 py-3 text-sm font-semibold text-white transition hover:bg-[#C96F00] disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -455,7 +360,7 @@ function BookingDetails({ booking, onStatusChange }) {
 
         <button
           type="button"
-          disabled={booking.status === "Approved" || booking.status === "Rejected"}
+          disabled={booking.backendStatus !== "Submitted" || saving}
           onClick={() => handleAction("Rejected")}
           className="flex items-center justify-center gap-2 rounded-lg bg-[#DC2626] px-3 py-3 text-sm font-semibold text-white transition hover:bg-[#B91C1C] disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -468,12 +373,40 @@ function BookingDetails({ booking, onStatusChange }) {
 }
 
 const Bookings = () => {
-  const [bookings, setBookings] = useState(initialBookings);
-  const [selectedId, setSelectedId] = useState(initialBookings[0].id);
+  const [bookings, setBookings] = useState([]);
+  const [selectedId, setSelectedId] = useState("");
   const [activeTab, setActiveTab] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const navigate = useNavigate();
+
+  const loadBookings = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await api.get("/store-bookings");
+      const list = (data.bookings || []).map(mapBooking);
+      setBookings(list);
+      setSelectedId((current) => list.some((booking) => booking.id === current)
+        ? current
+        : (list[0]?.id || ""));
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || "Unable to load bookings from the server.");
+      setBookings([]);
+      setSelectedId("");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => { void loadBookings(); }, 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [loadBookings]);
 
   const filteredBookings = useMemo(() => {
     return bookings.filter((booking) => {
@@ -496,18 +429,30 @@ const Bookings = () => {
   const selectedBooking =
     bookings.find((booking) => booking.id === selectedId);
 
-  const handleStatusChange = (bookingId, newStatus, note) => {
-    setBookings((previousBookings) =>
-      previousBookings.map((booking) =>
-        booking.id === bookingId
-          ? {
-              ...booking,
-              status: newStatus,
-              reviewerNote: note,
-            }
-          : booking
-      )
-    );
+  const handleStatusChange = async (booking, newStatus, note) => {
+    if (newStatus !== "Approved" && !note.trim()) {
+      setError(`Add a reviewer note before marking this booking as ${newStatus.toLowerCase()}.`);
+      return;
+    }
+    const endpoint = {
+      Approved: "approve",
+      "Changes Requested": "request-changes",
+      Rejected: "reject",
+    }[newStatus];
+    if (!endpoint) return;
+
+    setSavingId(booking.mongoId);
+    setError("");
+    setSuccess("");
+    try {
+      const { data } = await api.patch(`/store-bookings/${booking.mongoId}/${endpoint}`, { reason: note.trim() });
+      setSuccess(data.message || `Booking ${booking.id} updated to ${newStatus}.`);
+      await loadBookings();
+    } catch (actionError) {
+      setError(actionError.response?.data?.message || `Unable to update booking ${booking.id}.`);
+    } finally {
+      setSavingId("");
+    }
   };
 
   const getTabCount = (tab) => {
@@ -527,7 +472,7 @@ const Bookings = () => {
             </h1>
 
             <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
-              ● {bookings.filter((b) => b.status === "Pending").length} Pending Approvals
+              ● {bookings.filter((b) => b.backendStatus === "Submitted").length} Pending Approvals
             </span>
           </div>
 
@@ -537,6 +482,15 @@ const Bookings = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void loadBookings()}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-lg border border-gray-100 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCcw size={15} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
           <button
             type="button"
             onClick={() => navigate("/approval-log")}
@@ -555,6 +509,9 @@ const Bookings = () => {
           </button> */}
         </div>
       </div>
+
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
+      {success && <div role="status" className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{success}</div>}
 
       {/* Main Two Column Layout */}
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
@@ -597,7 +554,9 @@ const Bookings = () => {
 
           {/* Booking List */}
           <div className="space-y-2">
-            {filteredBookings.length > 0 ? (
+            {loading ? (
+              <div className="rounded-xl bg-white p-8 text-center text-sm text-gray-500 shadow-sm">Loading bookings…</div>
+            ) : filteredBookings.length > 0 ? (
               filteredBookings.map((booking) => (
                 <BookingCard
                   key={booking.id}
@@ -613,7 +572,7 @@ const Bookings = () => {
                   className="mx-auto text-gray-300"
                 />
                 <p className="mt-3 text-sm font-semibold text-gray-700">
-                  No bookings found
+                  {error ? "Bookings could not be loaded" : "No bookings found"}
                 </p>
                 <p className="mt-1 text-xs text-gray-500">
                   Try changing your search or selected filter.
@@ -642,6 +601,7 @@ const Bookings = () => {
               key={selectedBooking.id}
               booking={selectedBooking}
               onStatusChange={handleStatusChange}
+              saving={savingId === selectedBooking.mongoId}
             />
           ) : (
             <div className="flex min-h-[400px] flex-col items-center justify-center rounded-xl bg-white p-8 text-center shadow-sm">

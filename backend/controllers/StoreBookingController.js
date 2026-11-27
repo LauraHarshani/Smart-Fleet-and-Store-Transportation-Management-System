@@ -3,6 +3,8 @@ const { StoreBooking } = require('../models/StoreBooking');
 const { cancelStoreBooking: cancelStoreBookingAndRevalidate } = require('../services/storeBookingCancellationService');
 const Store = require('../models/store');
 const Item = require('../models/item');
+const Trip = require('../models/trip');
+const Vehicle = require('../models/vehicle');
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const storeRefId = (store) => {
@@ -97,6 +99,17 @@ const checkUserRoleAndStoreScope = (req, booking, { allowedRoles = null, checkBo
   return null;
 };
 
+const checkStoreParticipatesInRoute = (req, pickupStore, destinationStore) => {
+  if (!req.user || isAdminUser(req)) return null;
+  const assignedStoreId = req.user.storeId;
+  if (!assignedStoreId || !isValidId(assignedStoreId)) return 'No store has been assigned to your account';
+  const assignedId = assignedStoreId.toString();
+  if (storeRefId(pickupStore) !== assignedId && storeRefId(destinationStore) !== assignedId) {
+    return 'Your assigned store must be either the pickup store or the destination store';
+  }
+  return null;
+};
+
 const validateStoresAndItems = async ({ pickupStore, destinationStore, requestedPickupDate, items }) => {
   if (!pickupStore || !isValidId(pickupStore)) {
     return 'Valid pickupStore ID is required';
@@ -183,18 +196,8 @@ exports.createStoreBooking = async (req, res) => {
       return res.status(400).json({ message: errorMsg });
     }
 
-    if (req.user) {
-      const rawRole = (req.user.role || '').toString().toLowerCase();
-      const isAdmin = ['admin', 'system administrator', 'administrator'].includes(rawRole);
-      const userStoreId = req.user.storeId;
-      if (!isAdmin && (!userStoreId || userStoreId.toString() !== pickupStore.toString())) {
-        return res.status(403).json({
-          message: userStoreId
-            ? 'You can only create bookings from your assigned store'
-            : 'No store has been assigned to your account',
-        });
-      }
-    }
+    const routeScopeError = checkStoreParticipatesInRoute(req, pickupStore, destinationStore);
+    if (routeScopeError) return res.status(403).json({ message: routeScopeError });
 
     const booking = new StoreBooking({
       pickupStore,
@@ -252,6 +255,8 @@ exports.getStoreBookings = async (req, res) => {
 
     const bookings = await StoreBooking.find(filter)
       .populate('pickupStore destinationStore items.item stops.store')
+      .populate('assignedTrip', 'id route status vehicle driver')
+      .populate('assignedVehicle', 'id registrationNumber model type assignedDriverName')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ count: bookings.length, bookings });
@@ -265,9 +270,10 @@ exports.getStoreBookingById = async (req, res) => {
     if (!isValidId(req.params.id)) {
       return res.status(400).json({ message: 'Invalid booking ID' });
     }
-    const booking = await StoreBooking.findById(req.params.id).populate(
-      'pickupStore destinationStore items.item stops.store'
-    );
+    const booking = await StoreBooking.findById(req.params.id)
+      .populate('pickupStore destinationStore items.item stops.store')
+      .populate('assignedTrip', 'id route status vehicle driver')
+      .populate('assignedVehicle', 'id registrationNumber model type assignedDriverName');
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
@@ -346,6 +352,8 @@ exports.updateStoreBooking = async (req, res) => {
     if (errorMsg) {
       return res.status(400).json({ message: errorMsg });
     }
+    const routeScopeError = checkStoreParticipatesInRoute(req, nextPickup, nextDest);
+    if (routeScopeError) return res.status(403).json({ message: routeScopeError });
 
     const currentStatus = booking.status;
     booking.pickupStore = nextPickup;
@@ -619,6 +627,31 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
       body.reviewedBy || body.updatedBy || req.user?.userId || req.user?._id || req.user?.id || booking.requestedBy;
     const prevStatus = booking.status;
 
+    let allocatedTrip = null;
+    let allocatedVehicle = null;
+    if (targetStatus === 'In Progress' || targetStatus === 'Completed') {
+      if (!booking.assignedTrip || !booking.assignedVehicle) {
+        return res.status(400).json({ message: 'Allocate a trip and fleet vehicle before starting this booking' });
+      }
+      [allocatedTrip, allocatedVehicle] = await Promise.all([
+        Trip.findById(booking.assignedTrip),
+        Vehicle.findById(booking.assignedVehicle),
+      ]);
+      if (!allocatedTrip || !allocatedVehicle) {
+        return res.status(409).json({ message: 'The allocated trip or vehicle no longer exists' });
+      }
+      if (targetStatus === 'In Progress') {
+        if (allocatedVehicle.status !== 'Available') {
+          return res.status(409).json({ message: 'The allocated vehicle is no longer available' });
+        }
+        allocatedVehicle.status = 'In Transit';
+        allocatedTrip.status = 'In Progress';
+      } else {
+        allocatedVehicle.status = 'Available';
+        allocatedTrip.status = 'Completed';
+      }
+    }
+
     if (targetStatus === 'Cancelled') {
       const result = await cancelStoreBookingAndRevalidate({
         bookingId: booking._id,
@@ -647,7 +680,20 @@ const transitionStatus = async (req, res, targetStatus, actionName, allowedRoles
       reason,
     });
 
-    await booking.save();
+    if (allocatedTrip && allocatedVehicle) {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await booking.save({ session });
+          await allocatedTrip.save({ session });
+          await allocatedVehicle.save({ session });
+        });
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      await booking.save();
+    }
     return res.status(200).json({
       message: `Booking status changed to ${targetStatus}`,
       booking,

@@ -18,6 +18,7 @@ const vehicleSchema = new mongoose.Schema({
     enum: ['Available', 'In Transit', 'Maintenance', 'Inactive'],
     default: 'Available'
   },
+  allocationRevision: { type: Number, default: 0 },
   image: { type: String, default: null }
 }, { timestamps: true });
 

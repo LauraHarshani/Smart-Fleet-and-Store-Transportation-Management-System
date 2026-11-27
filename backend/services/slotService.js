@@ -8,6 +8,7 @@ const Trip = require("../models/trip");
 const {
   checkSlotAvailability,
   lockStoreReservations,
+  getAvailableDockNumbers,
 } = require("./conflictDetectionService");
 
 // Create a consistent error
@@ -44,12 +45,13 @@ const validateSlotTime = (startAt, endAt) => {
 };
 
 // CREATE SLOT RESERVATION
-const createSlot = async (slotData = {}, storeScope = null) => {
+const createSlotInSession = async (slotData = {}, session, storeScope = null) => {
   const {
     store: requestedStore,
     trip,
     stopId,
     vehicle,
+    dockNumber,
     operationType,
     startAt,
     endAt,
@@ -80,35 +82,56 @@ const createSlot = async (slotData = {}, storeScope = null) => {
 
   const { start, end } = validateSlotTime(startAt, endAt);
 
-  const session = await mongoose.startSession();
+  const existingStore = await Store.findById(store).session(session);
+  if (!existingStore) throw createError("Store not found.", 404);
+
+  const existingTrip = await Trip.findById(trip).session(session);
+  if (!existingTrip) throw createError("Trip not found.", 404);
+  if (!existingTrip.stops.id(stopId)) {
+    throw createError("The selected stop does not belong to this trip.");
+  }
+
+  await lockStoreReservations(store, session);
+  let assignedDockNumber = dockNumber;
+  if (assignedDockNumber === undefined || assignedDockNumber === null) {
+    const availability = await getAvailableDockNumbers({ storeId: store, startAt: start, endAt: end, session });
+    assignedDockNumber = availability.availableDockNumbers[0];
+    if (!assignedDockNumber) throw createError("No store dock is available during the requested time.", 409);
+  }
+  await checkSlotAvailability({ storeId: store, startAt: start, endAt: end, dockNumber: assignedDockNumber, session });
+
+  const [newSlot] = await StoreSlot.create([{
+    store,
+    trip,
+    stopId,
+    vehicle: vehicle.trim(),
+    dockNumber: Number(assignedDockNumber),
+    operationType,
+    startAt: start,
+    endAt: end,
+    notes: notes || "",
+  }], { session });
+  return newSlot;
+};
+
+// CREATE SLOT RESERVATION
+const createSlot = async (slotData = {}, scopeOrSession = null) => {
+  const isSession = Boolean(
+    scopeOrSession && typeof scopeOrSession.withTransaction === "function"
+  );
+  const session = isSession ? scopeOrSession : null;
+  const storeScope = isSession ? null : scopeOrSession;
+
+  if (session) return createSlotInSession(slotData, session);
+
+  const ownSession = await mongoose.startSession();
   let newSlot;
   try {
-    await session.withTransaction(async () => {
-      const existingStore = await Store.findById(store).session(session);
-      if (!existingStore) throw createError("Store not found.", 404);
-
-      const existingTrip = await Trip.findById(trip).session(session);
-      if (!existingTrip) throw createError("Trip not found.", 404);
-      if (!existingTrip.stops.id(stopId)) {
-        throw createError("The selected stop does not belong to this trip.");
-      }
-
-      await lockStoreReservations(store, session);
-      await checkSlotAvailability({ storeId: store, startAt: start, endAt: end, session });
-
-      [newSlot] = await StoreSlot.create([{
-        store,
-        trip,
-        stopId,
-        vehicle: vehicle.trim(),
-        operationType,
-        startAt: start,
-        endAt: end,
-        notes: notes || "",
-      }], { session });
+    await ownSession.withTransaction(async () => {
+      newSlot = await createSlotInSession(slotData, ownSession, storeScope);
     });
   } finally {
-    await session.endSession();
+    await ownSession.endSession();
   }
   return newSlot;
 };
@@ -136,7 +159,14 @@ const getSlots = async (filters = {}) => {
 
   return await StoreSlot.find(query)
     .populate("store", "name code docks")
-    .populate("trip", "id route status")
+    .populate({
+      path: "trip",
+      select: "id route status driver storeBookings",
+      populate: {
+        path: "storeBookings",
+        select: "items",
+      },
+    })
     .sort({ startAt: 1 });
 };
 
@@ -148,7 +178,7 @@ const getSlotById = async (slotId, storeScope = null) => {
 
   const slot = await StoreSlot.findById(slotId)
     .populate("store", "name code docks")
-    .populate("trip", "id route status");
+    .populate("trip", "id route status driver");
 
   if (!slot) {
     throw createError("Slot reservation not found.", 404);
@@ -176,7 +206,7 @@ const updateSlot = async (slotId, updateData, storeScope = null) => {
       }
 
       await lockStoreReservations(slot.store, session);
-      const allowedFields = ["vehicle", "operationType", "startAt", "endAt", "notes"];
+      const allowedFields = ["vehicle", "dockNumber", "operationType", "startAt", "endAt", "notes"];
       allowedFields.forEach((field) => {
         if (updateData[field] !== undefined) slot[field] = updateData[field];
       });
@@ -187,6 +217,7 @@ const updateSlot = async (slotId, updateData, storeScope = null) => {
         startAt: start,
         endAt: end,
         excludeSlotId: slot._id,
+        dockNumber: slot.dockNumber,
         session,
       });
       await slot.save({ session });

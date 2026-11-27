@@ -27,6 +27,7 @@ const buildTripStops = (trip, bookings) => {
       ...(previous?._id ? { _id: previous._id } : {}),
       type: index === 0 ? 'ORIGIN' : 'DROP',
       location: stop.location,
+      store: stop.storeId,
       time: previous?.time || '',
       window: previous?.window || '',
       items: previous?.items || [],
@@ -120,7 +121,7 @@ const cancelStoreBooking = async ({ bookingId, actorId, reason = '' }) => {
             const retainedSlots = activeSlots.filter((slot) => stopIds.has(slot.stopId.toString()));
             if (retainedSlots.length) {
               await checkSlotScheduleAvailability({
-                proposedSlots: retainedSlots.map((slot) => ({ store: slot.store, startAt: slot.startAt, endAt: slot.endAt })),
+                proposedSlots: retainedSlots.map((slot) => ({ store: slot.store, dockNumber: slot.dockNumber, startAt: slot.startAt, endAt: slot.endAt })),
                 replacedSlotIds,
                 session,
               });

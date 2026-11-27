@@ -171,7 +171,8 @@ const storeBookingSchema = new mongoose.Schema(
     },
     assignedTrip: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Trip',
+      // The Trip model is registered as "trips" in models/trip.js.
+      ref: 'trips',
       default: null,
     },
     assignedVehicle: {
