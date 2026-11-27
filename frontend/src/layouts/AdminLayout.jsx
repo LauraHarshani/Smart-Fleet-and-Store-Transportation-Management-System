@@ -1,85 +1,150 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
     Truck, LayoutDashboard, CalendarCheck, Route as RouteIcon, 
-    CalendarDays, MapPin, Users, Store, Package, UserCog, 
+    CalendarDays, MapPin, Store, Package, UserCog,
     LineChart, User, LogOut, Bell, X, Settings, Check, ShieldAlert,
-    TruckIcon, ClipboardCheck, Snowflake, Radio
+    TruckIcon, ClipboardCheck, Radio, Loader2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 
-const initialNotifications = [
-    {
-        id: 1,
-        category: 'Alerts',
-        type: 'COLD CHAIN CRITICAL',
-        title: 'Cold Chain Temperature Alert',
-        description: 'Reefer container #REEF-042 exceeded +4.0°C threshold. Automated chiller boost triggered.',
-        location: 'Peliyagoda Hub',
-        time: '8 mins ago',
-        action: 'Inspect Alert',
-        to: '/live-tracking',
-        icon: Snowflake,
-        tone: 'red',
-        unread: true,
-    },
-    {
-        id: 2,
-        category: 'Trips',
-        type: 'ROUTE DEVIATION',
-        title: 'Route Deviation Approved: TRP-884',
-        description: 'Detour via Baseline Road authorized by Sara Lin due to waterlogging near Orugodawatta junction.',
-        location: 'Dispatch #TRP-884',
-        time: '24 mins ago',
-        action: 'View Route',
-        to: '/trip-planning',
-        icon: TruckIcon,
-        tone: 'green',
-        unread: true,
-    },
-    {
-        id: 3,
-        category: 'Alerts',
-        type: 'COMPLIANCE / HOS',
-        title: 'Driver Rest Break Logged',
-        description: 'Driver DRV-301 (Kamal Gunathilaka) initiated scheduled 45-min mandatory rest at Ambepussa Rest Area.',
-        location: 'Route WP-08 · Ambepussa',
-        time: '1 hour ago',
-        action: 'View Schedule',
-        to: '/schedules',
-        icon: ClipboardCheck,
-        tone: 'green',
-        unread: true,
-    },
-    {
-        id: 4,
-        category: 'System',
-        type: 'SEAL INTEGRITY',
-        title: 'Digital Cryoseal Verified',
-        description: 'Container SL-552 tamper-evident RFID passed verification at Colombo Port terminal 2.',
-        location: 'Terminal 2 Checkpoint',
-        time: '3 hours ago',
-        action: 'View Verification',
-        to: '/reports',
-        icon: ShieldAlert,
-        tone: 'green',
-        unread: true,
-    },
-    {
-        id: 5,
-        category: 'System',
-        type: 'SYSTEM SYNC',
-        title: 'Fleet data synchronized',
-        description: 'Vehicle telemetry and dispatch records were synchronized successfully.',
-        location: 'All fleet depots',
-        time: '5 hours ago',
-        action: 'View Reports',
-        to: '/reports',
-        icon: Radio,
-        tone: 'blue',
-        unread: false,
-    },
-];
+const readStoredNotificationIds = (storageKey) => {
+    const storedIds = localStorage.getItem(storageKey);
+    if (!storedIds) return new Set();
+
+    const parsedIds = JSON.parse(storedIds);
+    if (!Array.isArray(parsedIds) || parsedIds.some((id) => typeof id !== 'string')) {
+        throw new Error('Saved notification read state is invalid.');
+    }
+
+    return new Set(parsedIds);
+};
+
+const formatNotificationTime = (value) => {
+    const timestamp = new Date(value).getTime();
+    if (Number.isNaN(timestamp)) return 'Recently';
+
+    const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (elapsedMinutes < 1) return 'Just now';
+    if (elapsedMinutes < 60) return `${elapsedMinutes} min${elapsedMinutes === 1 ? '' : 's'} ago`;
+
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    if (elapsedHours < 24) return `${elapsedHours} hour${elapsedHours === 1 ? '' : 's'} ago`;
+
+    const elapsedDays = Math.floor(elapsedHours / 24);
+    if (elapsedDays < 7) return `${elapsedDays} day${elapsedDays === 1 ? '' : 's'} ago`;
+
+    return new Date(timestamp).toLocaleDateString();
+};
+
+const toAdminNotifications = (bookings, trips, auditLogs) => {
+    const bookingNotifications = bookings.flatMap((booking) => {
+        const code = booking.bookingCode || booking._id;
+        const history = booking.changeHistory?.length
+            ? booking.changeHistory
+            : [{
+                action: booking.status?.toUpperCase().replace(/\s+/g, '_'),
+                toStatus: booking.status,
+                changedAt: booking.updatedAt || booking.createdAt,
+            }];
+        const getAction = (change) =>
+            change.action ||
+            change.toStatus?.toUpperCase().replace(/\s+/g, '_') ||
+            booking.status?.toUpperCase().replace(/\s+/g, '_');
+        const hasBeenSubmitted = history.some((change) => getAction(change) === 'SUBMITTED');
+
+        return history
+            .map((change, index) => ({ change, index }))
+            .filter(({ change }) => !hasBeenSubmitted || getAction(change) !== 'CREATED')
+            .map(({ change, index }) => {
+                const action = getAction(change);
+                const timestamp = change.changedAt || booking.updatedAt || booking.createdAt;
+                const titles = {
+                    CREATED: 'Booking created',
+                    UPDATED: 'Booking updated',
+                    SUBMITTED: 'Booking submitted',
+                    APPROVED: 'Booking approved',
+                    REJECTED: 'Booking rejected',
+                    CHANGES_REQUESTED: 'Booking changes requested',
+                    IN_PROGRESS: 'Booking in progress',
+                    COMPLETED: 'Booking completed',
+                    CANCELLED: 'Booking cancelled',
+                };
+                const isAlert = ['REJECTED', 'CHANGES_REQUESTED', 'CANCELLED'].includes(action);
+                const pickup = booking.pickupStore?.name;
+                const destination = booking.destinationStore?.name;
+
+                return {
+                    id: `booking-${booking._id}-${change._id || `${action}-${index}`}`,
+                    category: 'Alerts',
+                    type: `BOOKING ${action.replace(/_/g, ' ')}`,
+                    title: titles[action] || 'Booking update',
+                    description: change.reason || `Booking ${code} status: ${change.toStatus || booking.status}.`,
+                    location: [pickup, destination].filter(Boolean).join(' → ') || `Booking ${code}`,
+                    timestamp: new Date(timestamp).getTime() || 0,
+                    time: formatNotificationTime(timestamp),
+                    action: 'View Booking',
+                    to: '/bookings',
+                    icon: isAlert ? ShieldAlert : ClipboardCheck,
+                    tone: isAlert ? 'red' : 'green',
+                    unread: true,
+                };
+            });
+    });
+
+    const tripNotifications = trips.map((trip) => {
+        const status = trip.status || 'Updated';
+        const isAlert = ['Delayed', 'Cancelled'].includes(status);
+        const timestamp = trip.updatedAt || trip.createdAt || trip.date;
+        const tripCode = trip.id || trip._id;
+
+        return {
+            id: `trip-${trip._id}-${timestamp || status}`,
+            category: isAlert ? 'Alerts' : 'Trips',
+            type: `TRIP ${status.toUpperCase()}`,
+            title: `Trip ${status.toLowerCase()}: ${tripCode}`,
+            description: [trip.route, trip.vehicle && `Vehicle ${trip.vehicle}`].filter(Boolean).join(' · ') || `Trip status: ${status}.`,
+            location: trip.route || `Trip ${tripCode}`,
+            timestamp: new Date(timestamp).getTime() || 0,
+            time: formatNotificationTime(timestamp),
+            action: 'View Trip',
+            to: '/trip-planning',
+            icon: isAlert ? ShieldAlert : TruckIcon,
+            tone: isAlert ? 'red' : 'green',
+            unread: true,
+        };
+    });
+
+    const auditNotifications = auditLogs.map((log) => {
+        const action = (log.action || 'UPDATE').toUpperCase();
+        const actionVerb = { CREATE: 'created', UPDATE: 'updated', DELETE: 'deleted' }[action] || action.toLowerCase();
+        const entity = log.entityType || 'record';
+        const entityName = entity.charAt(0).toUpperCase() + entity.slice(1);
+        const timestamp = log.timestamp;
+        const actorName = log.performedBy?.name;
+
+        return {
+            id: `audit-${log._id}`,
+            category: 'System',
+            type: `ADMIN ${action}`,
+            title: `${entityName} ${actionVerb}`,
+            description: `${actorName || 'An administrator'} ${actionVerb} ${entity} ${log.entityId}.`,
+            location: `${entityName} · ${log.entityId}`,
+            timestamp: new Date(timestamp).getTime() || 0,
+            time: formatNotificationTime(timestamp),
+            action: 'View Reports',
+            to: '/reports',
+            icon: Radio,
+            tone: 'blue',
+            unread: true,
+        };
+    });
+
+    return [...bookingNotifications, ...tripNotifications, ...auditNotifications]
+        .sort((left, right) => right.timestamp - left.timestamp)
+        .slice(0, 30);
+};
 
 const notificationTabs = ['All', 'Alerts', 'Trips', 'System'];
 
@@ -124,9 +189,79 @@ const AdminLayout = () => {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
     const pageTitle = pageTitles[location.pathname] ?? '';
+    const notificationOwnerId = user?.userId || user?.id || user?._id || 'admin';
+    const readNotificationStorageKey = `admin-notification-read:${notificationOwnerId}`;
     const [notificationsOpen, setNotificationsOpen] = useState(false);
-    const [notifications, setNotifications] = useState(initialNotifications);
+    const [notifications, setNotifications] = useState([]);
+    const [notificationsLoading, setNotificationsLoading] = useState(true);
+    const [notificationsError, setNotificationsError] = useState('');
     const [activeNotificationTab, setActiveNotificationTab] = useState('All');
+    const dismissedNotificationIds = useRef(new Set());
+
+    useEffect(() => {
+        let active = true;
+        let loading = false;
+
+        const loadNotifications = async (initialLoad = false) => {
+            if (loading) return;
+            loading = true;
+            if (initialLoad) setNotificationsLoading(true);
+
+            try {
+                const [bookingsResponse, tripsResponse, auditResponse] = await Promise.all([
+                    api.get('/store-bookings'),
+                    api.get('/trips'),
+                    api.get('/audit-logs', { params: { page: 1, limit: 20 } }),
+                ]);
+                const bookings = bookingsResponse.data?.bookings;
+                const trips = tripsResponse.data?.trips;
+                const auditLogs = auditResponse.data?.data;
+
+                if (!Array.isArray(bookings) || !Array.isArray(trips) || !Array.isArray(auditLogs)) {
+                    throw new Error('Unexpected notification data received from the server.');
+                }
+
+                const readNotificationIds = readStoredNotificationIds(readNotificationStorageKey);
+                const nextNotifications = toAdminNotifications(bookings, trips, auditLogs)
+                    .filter((notification) => !dismissedNotificationIds.current.has(notification.id))
+                    .map((notification) => ({
+                        ...notification,
+                        unread: !readNotificationIds.has(notification.id),
+                    }));
+
+                if (active) {
+                    setNotifications(nextNotifications);
+                    setNotificationsError('');
+                }
+            } catch (error) {
+                if (active) {
+                    setNotificationsError(
+                        error.response?.data?.message ||
+                        error.message ||
+                        'Unable to load admin notifications.'
+                    );
+                }
+            } finally {
+                loading = false;
+                if (active) setNotificationsLoading(false);
+            }
+        };
+
+        void loadNotifications(true);
+        const intervalId = window.setInterval(() => {
+            if (document.visibilityState === 'visible') void loadNotifications();
+        }, 30_000);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') void loadNotifications();
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            active = false;
+            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [readNotificationStorageKey]);
 
     useEffect(() => {
         if (!notificationsOpen) return undefined;
@@ -148,6 +283,18 @@ const AdminLayout = () => {
         setNotifications((current) =>
             current.map((notification) => ({ ...notification, unread: false }))
         );
+        try {
+            const readNotificationIds = readStoredNotificationIds(readNotificationStorageKey);
+            notifications.forEach((notification) => readNotificationIds.add(notification.id));
+            localStorage.setItem(
+                readNotificationStorageKey,
+                JSON.stringify([...readNotificationIds])
+            );
+            setNotificationsError('');
+        } catch (error) {
+            console.error('Unable to save notification read state:', error);
+            setNotificationsError(error.message || 'Unable to save notification read state.');
+        }
     };
 
     const markAsRead = (id) => {
@@ -156,6 +303,25 @@ const AdminLayout = () => {
                 notification.id === id ? { ...notification, unread: false } : notification
             )
         );
+        try {
+            const readNotificationIds = readStoredNotificationIds(readNotificationStorageKey);
+            readNotificationIds.add(id);
+            localStorage.setItem(
+                readNotificationStorageKey,
+                JSON.stringify([...readNotificationIds])
+            );
+            setNotificationsError('');
+        } catch (error) {
+            console.error('Unable to save notification read state:', error);
+            setNotificationsError(error.message || 'Unable to save notification read state.');
+        }
+    };
+
+    const clearAllNotifications = () => {
+        notifications.forEach((notification) =>
+            dismissedNotificationIds.current.add(notification.id)
+        );
+        setNotifications([]);
     };
 
     const handleSignOut = async () => {
@@ -227,11 +393,14 @@ const AdminLayout = () => {
                             onClick={() => setNotificationsOpen(true)}
                             aria-label={`Open notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
                             aria-expanded={notificationsOpen}
+                            aria-haspopup="dialog"
                             className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#113b2e] focus:outline-none focus:ring-2 focus:ring-emerald-200"
                         >
                             <Bell size={22} />
                             {unreadCount > 0 && (
-                                <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
+                                <span className="absolute -right-0.5 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
                             )}
                         </button>
                         
@@ -320,7 +489,17 @@ const AdminLayout = () => {
                         </div>
 
                         <div className="flex-1 space-y-3 overflow-y-auto bg-[#f7f9f8] p-3">
-                            {visibleNotifications.length === 0 ? (
+                            {notificationsLoading ? (
+                                <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-500">
+                                    <Loader2 size={18} className="animate-spin" />
+                                    Loading live notifications…
+                                </div>
+                            ) : notificationsError && notifications.length === 0 ? (
+                                <div role="alert" className="flex h-full flex-col items-center justify-center px-6 text-center">
+                                    <p className="text-sm font-semibold text-red-700">Notifications could not be loaded</p>
+                                    <p className="mt-1 text-xs text-gray-500">{notificationsError}</p>
+                                </div>
+                            ) : visibleNotifications.length === 0 ? (
                                 <div className="flex h-full flex-col items-center justify-center px-6 text-center">
                                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-gray-400 shadow-sm">
                                         <Check size={22} />
@@ -328,7 +507,14 @@ const AdminLayout = () => {
                                     <p className="mt-3 text-sm font-semibold text-gray-700">You're all caught up</p>
                                     <p className="mt-1 text-xs text-gray-500">No notifications in this category.</p>
                                 </div>
-                            ) : visibleNotifications.map((notification) => {
+                            ) : (
+                                <>
+                                    {notificationsError && (
+                                        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                            {notificationsError}
+                                        </p>
+                                    )}
+                                    {visibleNotifications.map((notification) => {
                                 const Icon = notification.icon;
                                 const toneClasses = notification.tone === 'red'
                                     ? 'text-red-600 bg-red-50'
@@ -384,13 +570,15 @@ const AdminLayout = () => {
                                         </div>
                                     </article>
                                 );
-                            })}
+                                    })}
+                                </>
+                            )}
                         </div>
 
                         <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3">
                             <button
                                 type="button"
-                                onClick={() => setNotifications([])}
+                                onClick={clearAllNotifications}
                                 disabled={notifications.length === 0}
                                 className="text-xs font-medium text-gray-600 hover:text-red-600 disabled:cursor-default disabled:text-gray-400"
                             >
