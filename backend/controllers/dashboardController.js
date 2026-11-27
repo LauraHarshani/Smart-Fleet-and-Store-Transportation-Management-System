@@ -1,5 +1,4 @@
 const Vehicle = require("../models/vehicle");
-const Booking = require("../models/booking");
 const { StoreBooking } = require("../models/StoreBooking");
 const Trip = require("../models/trip");
 
@@ -57,8 +56,8 @@ const getDashboardKPIs = async (req, res) => {
                 date: { $gte: start, $lt: end }
             }),
 
-            Booking.countDocuments({
-                status: "Pending"
+            StoreBooking.countDocuments({
+                status: "Submitted"
             }),
 
             Trip.countDocuments({

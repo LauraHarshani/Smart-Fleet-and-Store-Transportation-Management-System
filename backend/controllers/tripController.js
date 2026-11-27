@@ -230,8 +230,16 @@ const allocateStoreBooking = async (req, res) => {
       }
 
       // A write on the vehicle serializes concurrent allocation transactions for the same unit.
-      vehicle.allocationRevision = Number(vehicle.allocationRevision || 0) + 1;
-      await vehicle.save({ session });
+      const allocationLock = await Vehicle.updateOne(
+        { _id: vehicle._id, status: 'Available' },
+        { $inc: { allocationRevision: 1 } },
+        { session }
+      );
+      if (!allocationLock.matchedCount) {
+        const error = new Error('Select an available fleet vehicle.');
+        error.statusCode = 409;
+        throw error;
+      }
 
       const totalWeight = booking.items.reduce((sum, line) => sum + (Number(line.item?.weightKg || 0) * Number(line.quantity || 0)), 0);
       if (vehicle.capacityWeightKg > 0 && totalWeight > vehicle.capacityWeightKg) {
