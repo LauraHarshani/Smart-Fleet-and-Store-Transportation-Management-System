@@ -79,6 +79,34 @@ const VehicleTimeline = ({
   setTripStatusFilter,
 }) => {
   const vehicleOptions = ["All Vehicles", ...(vehicles.length ? [...new Set(vehicles)] : VEHICLES.slice(1))];
+  const vehicleGroups = trips.reduce((groups, trip) => {
+    const key = trip.vehicle || `Unassigned · ${trip.id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(trip);
+    return groups;
+  }, new Map());
+
+  const rows = Array.from(vehicleGroups, ([vehicle, vehicleTrips]) => {
+    const laneEnds = [];
+    const positionedTrips = [...vehicleTrips]
+      .sort((a, b) => (timeToPercent(a.start) - timeToPercent(b.start)))
+      .map((trip) => {
+        const left = timeToPercent(trip.start);
+        const right = timeToPercent(trip.end);
+        let lane = laneEnds.findIndex((laneEnd) => laneEnd <= left);
+        if (lane === -1) lane = laneEnds.length;
+        laneEnds[lane] = right;
+        return { trip, lane, left, width: right - left };
+      });
+
+    return {
+      vehicle,
+      capacity: vehicleTrips[0]?.capacity,
+      trips: positionedTrips,
+      height: Math.max(70, laneEnds.length * 58 + 12),
+    };
+  });
+
   return (
     <div className="rounded-2xl border border-[#E2E8E0] bg-white p-5 shadow-sm">
       {/* Filters and legend */}
@@ -169,20 +197,11 @@ const VehicleTimeline = ({
               No trips found for the selected filters.
             </div>
           ) : (
-            trips.map((trip) => {
-              const style =
-                statusStyles[trip.status] || statusStyles.Scheduled;
-
-              const left = timeToPercent(trip.start);
-              const right = timeToPercent(trip.end);
-              const width = right - left;
-
-              const isSelected = selectedTripId === trip.id;
-
-              return (
+            rows.map((row) => (
                 <div
-                  key={trip.id}
-                  className="flex h-[70px] border-t border-[#E2E8E0]"
+                  key={row.vehicle}
+                  className="flex border-t border-[#E2E8E0]"
+                  style={{ height: `${row.height}px` }}
                 >
                   {/* Vehicle Information */}
                   <div className="flex w-[135px] shrink-0 items-center gap-2 border-r border-[#E2E8E0] px-3">
@@ -193,12 +212,10 @@ const VehicleTimeline = ({
 
                     <div className="min-w-0">
                       <p className="truncate text-xs font-bold text-[#173F35]">
-                        {trip.vehicle}
+                        {row.vehicle}
                       </p>
 
-                      <p className="mt-1 text-[10px] text-[#64748B]">
-                        {trip.capacity}
-                      </p>
+                      {row.capacity && <p className="mt-1 text-[10px] text-[#64748B]">{row.capacity}</p>}
                     </div>
                   </div>
 
@@ -220,34 +237,32 @@ const VehicleTimeline = ({
                       ))}
                     </div>
 
-                    {/* Trip Block */}
-                    <button
-                      onClick={() => onSelectTrip(trip.id)}
-                      title={`${trip.id} · ${trip.route} · ${trip.start}–${trip.end}`}
-                      className={`absolute top-[12px] z-10 flex h-[46px] min-w-[55px] flex-col justify-center overflow-hidden rounded-lg px-3 text-left transition hover:brightness-[0.97] ${
-                        isSelected
-                          ? "ring-2 ring-[#173F35] ring-offset-1"
-                          : ""
-                      }`}
-                      style={{
-                        left: `${left}%`,
-                        width: `${Math.max(width, 5)}%`,
-                        backgroundColor: style.bg,
-                        color: style.text,
-                      }}
-                    >
-                      <span className="truncate text-xs font-bold">
-                        {trip.id}
-                      </span>
-
-                      <span className="truncate text-[10px]">
-                        {trip.route}
-                      </span>
-                    </button>
+                    {/* All trips assigned to this vehicle share one timeline row. */}
+                    {row.trips.map(({ trip, lane, left, width }) => {
+                      const style = statusStyles[trip.status] || statusStyles.Scheduled;
+                      const isSelected = selectedTripId === trip.id;
+                      return (
+                        <button
+                          key={trip.id}
+                          onClick={() => onSelectTrip(trip.id)}
+                          title={`${trip.id} · ${trip.route} · ${trip.start}–${trip.end}`}
+                          className={`absolute z-10 flex h-[46px] min-w-[55px] flex-col justify-center overflow-hidden rounded-lg px-3 text-left transition hover:brightness-[0.97] ${isSelected ? "ring-2 ring-[#173F35] ring-offset-1" : ""}`}
+                          style={{
+                            top: `${12 + lane * 50}px`,
+                            left: `${left}%`,
+                            width: `${Math.max(width, 5)}%`,
+                            backgroundColor: style.bg,
+                            color: style.text,
+                          }}
+                        >
+                          <span className="truncate text-xs font-bold">{trip.id}</span>
+                          <span className="truncate text-[10px]">{trip.route}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              );
-            })
+            ))
           )}
         </div>
       </div>
