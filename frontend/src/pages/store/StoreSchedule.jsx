@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity, AlertCircle, Calendar, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, Download, Info, Loader2, MapPin, Plus, RefreshCw, Truck, X,
+  Clock, Download, Info, Loader2, MapPin, Plus, RefreshCw, Truck, Warehouse, X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
@@ -487,6 +487,7 @@ const StoreSchedule = () => {
                   <DetailRow icon={<Clock size={15} />} label="Time" value={`${formatTime(selectedSlot.startAt)} – ${formatTime(selectedSlot.endAt)}`} />
                   <DetailRow icon={<Activity size={15} />} label="Operation" value={getOperationLabel(selectedSlot.operationType)} />
                   <DetailRow icon={<Truck size={15} />} label="Vehicle" value={selectedSlot.vehicle || 'Not assigned'} />
+                  <DetailRow icon={<Warehouse size={15} />} label="Reserved dock" value={selectedSlot.dockNumber ? `Dock ${selectedSlot.dockNumber}` : 'Not assigned'} />
                   <DetailRow icon={<MapPin size={15} />} label="Store" value={selectedSlot.store?.name || storeName} />
                 </div>
 
