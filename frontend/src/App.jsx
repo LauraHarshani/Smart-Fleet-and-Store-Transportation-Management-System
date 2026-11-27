@@ -29,7 +29,6 @@ import StoreProfile from './pages/store/StoreProfile';
 // NEW Store Pages 
 import StoreSchedule from './pages/store/StoreSchedule';
 import TripProgress from './pages/store/TripProgress';
-import NewBooking from './pages/store/NewBooking';
 import { AuthProvider } from './contexts/AuthContext';
 
 // Temporary page for sections that do not have a screen yet
@@ -79,7 +78,7 @@ function App() {
             
             <Route path="schedule" element={<StoreSchedule />} />
             <Route path="trip-progress" element={<TripProgress />} />
-            <Route path="new-booking" element={<NewBooking />} />
+            <Route path="new-booking" element={<Navigate to="/store/bookings" replace state={{ openCreateBooking: true }} />} />
             
             <Route path="bookings" element={<StoreBookings />} />
             <Route path="goods-handling" element={<GoodsHandling />} />

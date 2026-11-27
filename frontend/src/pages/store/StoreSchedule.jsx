@@ -28,6 +28,11 @@ const formatTime = (value) => {
     : date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
+const minutesOfDay = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getHours() * 60 + date.getMinutes();
+};
+
 const toDateTimeLocal = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
@@ -59,6 +64,17 @@ const getSlotTone = (slot) => {
   if (slot.operationType === 'Maintenance') return 'bg-[#FFF7ED] border-[#FED7AA] text-[#C2410C]';
   return 'bg-[#F0F7FF] border-[#D0E2F8] text-[#1D4ED8]';
 };
+
+const getTripStatusTone = (status) => ({
+  Draft: 'bg-gray-100 text-gray-700',
+  Pending: 'bg-gray-100 text-gray-700',
+  Assigned: 'bg-amber-50 text-amber-700',
+  Scheduled: 'bg-blue-50 text-blue-700',
+  'In Progress': 'bg-violet-50 text-violet-700',
+  Delayed: 'bg-red-50 text-red-700',
+  Completed: 'bg-green-50 text-green-700',
+  Cancelled: 'bg-gray-100 text-gray-500',
+}[status] || 'bg-gray-100 text-gray-700');
 
 const StoreSchedule = () => {
   const navigate = useNavigate();
@@ -99,7 +115,7 @@ const StoreSchedule = () => {
     return end;
   }, [visibleDays]);
 
-  const fetchSchedule = useCallback(async () => {
+  const fetchSchedule = useCallback(async ({ showLoading = true } = {}) => {
     if (!isObjectId(storeId)) {
       setScheduleData([]);
       setError('Your account does not have a valid assigned store. Please contact an administrator.');
@@ -107,7 +123,7 @@ const StoreSchedule = () => {
       return;
     }
 
-    setLoading(true);
+    if (showLoading) setLoading(true);
     setError('');
     try {
       const response = await api.get('/schedules', {
@@ -121,15 +137,27 @@ const StoreSchedule = () => {
       }
       setScheduleData(response.data.data);
     } catch (fetchError) {
-      setScheduleData([]);
+      if (showLoading) setScheduleData([]);
       setError(fetchError.response?.data?.message || fetchError.message || 'Failed to load store schedule.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [endOfView, startOfView, storeId]);
 
   useEffect(() => {
     void fetchSchedule();
+  }, [fetchSchedule]);
+
+  useEffect(() => {
+    const refreshVisibleSchedule = () => {
+      if (document.visibilityState === 'visible') void fetchSchedule({ showLoading: false });
+    };
+    const intervalId = window.setInterval(refreshVisibleSchedule, 30_000);
+    window.addEventListener('focus', refreshVisibleSchedule);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshVisibleSchedule);
+    };
   }, [fetchSchedule]);
 
   useEffect(() => {
@@ -157,11 +185,57 @@ const StoreSchedule = () => {
   const outboundCount = scheduleData.filter((slot) => slot.operationType === 'Loading').length;
   const completedCount = scheduleData.filter((slot) => slot.status === 'Completed').length;
 
-  const timeRows = useMemo(() => {
-    const defaults = ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30', '17:00'];
-    const starts = filteredSlots.map((slot) => formatTime(slot.startAt)).filter((time) => time !== '—');
-    return [...new Set([...defaults, ...starts])].sort();
-  }, [filteredSlots]);
+  const slotStartHours = filteredSlots.map((slot) => minutesOfDay(slot.startAt)).filter(Number.isFinite).map((minutes) => Math.floor(minutes / 60));
+  const slotEndHours = filteredSlots.map((slot) => minutesOfDay(slot.endAt)).filter(Number.isFinite).map((minutes) => Math.ceil(minutes / 60));
+  const timelineStartHour = Math.min(7, ...slotStartHours);
+  const timelineEndHour = Math.max(19, ...slotEndHours);
+  const timelinePixelsPerHour = 52;
+  const timelineHeight = (timelineEndHour - timelineStartHour) * timelinePixelsPerHour;
+  const hourLabels = Array.from({ length: timelineEndHour - timelineStartHour + 1 }, (_, index) => timelineStartHour + index);
+
+  const dailyLayouts = useMemo(() => new Map(visibleDays.map((day) => {
+    const dayKey = getDateKey(day);
+    const placements = filteredSlots
+      .filter((slot) => getDateKey(slot.startAt) === dayKey)
+      .map((slot) => {
+        const startMinute = minutesOfDay(slot.startAt);
+        const endMinute = minutesOfDay(slot.endAt);
+        return { slot, startMinute, endMinute };
+      })
+      .filter(({ startMinute, endMinute }) => Number.isFinite(startMinute) && Number.isFinite(endMinute) && endMinute > startMinute)
+      .sort((a, b) => a.startMinute - b.startMinute || a.endMinute - b.endMinute);
+
+    // Divide the day into independent overlap groups. A reservation that has no
+    // simultaneous neighbor gets the full day column, regardless of other groups.
+    const minimumVisualDuration = 24 * 60 / timelinePixelsPerHour;
+    let group = [];
+    let groupEndMinute = -Infinity;
+    const finishGroup = () => {
+      if (!group.length) return;
+      const laneEnds = [];
+      group.forEach((placement) => {
+        const visualEndMinute = Math.max(placement.endMinute, placement.startMinute + minimumVisualDuration);
+        let lane = laneEnds.findIndex((laneEnd) => laneEnd <= placement.startMinute);
+        if (lane < 0) lane = laneEnds.length;
+        laneEnds[lane] = visualEndMinute;
+        placement.lane = lane;
+      });
+      const laneCount = Math.max(1, laneEnds.length);
+      group.forEach((placement) => { placement.laneCount = laneCount; });
+      group = [];
+      groupEndMinute = -Infinity;
+    };
+
+    placements.forEach((placement) => {
+      const visualEndMinute = Math.max(placement.endMinute, placement.startMinute + minimumVisualDuration);
+      if (group.length && placement.startMinute >= groupEndMinute) finishGroup();
+      group.push(placement);
+      groupEndMinute = Math.max(groupEndMinute, visualEndMinute);
+    });
+    finishGroup();
+
+    return [dayKey, { placements }];
+  })), [filteredSlots, timelinePixelsPerHour, visibleDays]);
 
   const exportSchedule = () => {
     const rows = [
@@ -266,7 +340,7 @@ const StoreSchedule = () => {
           <button type="button" onClick={exportSchedule} disabled={!filteredSlots.length} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">
             <Download size={16} /> Export Schedule
           </button>
-          <button type="button" onClick={() => navigate('/store/new-booking')} className="flex items-center gap-2 rounded-lg bg-[#173F35] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0F2C25]">
+          <button type="button" onClick={() => navigate('/store/bookings', { state: { openCreateBooking: true } })} className="flex items-center gap-2 rounded-lg bg-[#173F35] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0F2C25]">
             <Plus size={16} /> New Booking
           </button>
         </div>
@@ -311,8 +385,8 @@ const StoreSchedule = () => {
           {loading ? (
             <div className="flex min-h-80 items-center justify-center gap-2 text-sm text-gray-500"><Loader2 size={20} className="animate-spin" /> Loading schedule…</div>
           ) : (
-            <div className="overflow-x-auto">
-              <div className="min-w-[760px]">
+            <div className="overflow-x-auto overflow-y-hidden">
+              <div className={viewMode === 'week' ? 'min-w-[1000px]' : 'min-w-[760px]'}>
                 <div className="grid border-b border-gray-200 bg-[#FAFBFC] text-center text-xs font-bold text-gray-700" style={{ gridTemplateColumns: `72px repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
                   <div className="border-r border-gray-200 py-3 text-[10px] font-medium text-gray-400">TIME</div>
                   {visibleDays.map((day) => {
@@ -328,29 +402,57 @@ const StoreSchedule = () => {
                   })}
                 </div>
 
-                {timeRows.map((time) => (
-                  <div key={time} className="grid min-h-[94px] text-xs" style={{ gridTemplateColumns: `72px repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
-                    <div className="border-b border-r border-gray-200 bg-gray-50/50 p-2 text-right font-medium text-gray-500">{time}</div>
-                    {visibleDays.map((day) => {
-                      const dayKey = getDateKey(day);
-                      const slots = filteredSlots.filter((slot) => getDateKey(slot.startAt) === dayKey && formatTime(slot.startAt) === time);
-                      return (
-                        <div key={`${dayKey}-${time}`} className="space-y-1.5 border-b border-r border-gray-200 p-1.5 last:border-r-0">
-                          {slots.map((slot) => (
-                            <button key={slot._id} type="button" onClick={() => setSelectedSlotId(slot._id)} className={`w-full rounded-md border p-2 text-left transition-shadow hover:shadow-md ${getSlotTone(slot)} ${selectedSlotId === slot._id ? 'ring-2 ring-[#173F35]/30' : ''}`}>
+                <p className="border-b border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-500">
+                  Reservation blocks span their full booked time. A reservation uses the full day column unless another reservation overlaps it.
+                </p>
+
+                <div className="grid text-xs" style={{ gridTemplateColumns: `72px repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
+                  <div className="relative border-r border-gray-200 bg-gray-50/50" style={{ height: `${timelineHeight}px` }}>
+                    {hourLabels.slice(0, -1).map((hour) => (
+                      <div key={hour} className="absolute right-2 -translate-y-1/2 text-[10px] font-medium text-gray-500" style={{ top: `${(hour - timelineStartHour) * timelinePixelsPerHour}px` }}>
+                        {`${pad(hour)}:00`}
+                      </div>
+                    ))}
+                  </div>
+                  {visibleDays.map((day) => {
+                    const dayKey = getDateKey(day);
+                    const layout = dailyLayouts.get(dayKey) || { placements: [] };
+                    return (
+                      <div key={dayKey} className="relative border-r border-gray-200 last:border-r-0" style={{ height: `${timelineHeight}px` }}>
+                        {hourLabels.map((hour) => (
+                          <div key={hour} className="pointer-events-none absolute inset-x-0 border-t border-gray-100" style={{ top: `${(hour - timelineStartHour) * timelinePixelsPerHour}px` }} />
+                        ))}
+                        {layout.placements.map(({ slot, startMinute, endMinute, lane, laneCount }) => {
+                          const top = (startMinute - timelineStartHour * 60) * timelinePixelsPerHour / 60;
+                          const height = Math.max(24, (endMinute - startMinute) * timelinePixelsPerHour / 60);
+                          const laneWidth = 100 / laneCount;
+                          return (
+                            <button
+                              key={slot._id}
+                              type="button"
+                              onClick={() => setSelectedSlotId(slot._id)}
+                              title={`${slot.trip?.id || 'Store slot'} · ${slot.operationType} · ${formatTime(slot.startAt)}–${formatTime(slot.endAt)} · ${slot.status}`}
+                              className={`absolute z-10 overflow-hidden rounded-md border p-1.5 text-left transition-shadow hover:z-20 hover:shadow-md ${getSlotTone(slot)} ${selectedSlotId === slot._id ? 'ring-2 ring-[#173F35]/40' : ''}`}
+                              style={{
+                                top: `${top}px`,
+                                height: `${height}px`,
+                                left: `calc(${lane * laneWidth}% + 3px)`,
+                                width: `calc(${laneWidth}% - 6px)`,
+                              }}
+                            >
                               <span className="flex items-center justify-between gap-1 text-[10px] font-bold">
                                 <span className="truncate">{slot.trip?.id || 'Store slot'}</span>
-                                <span className="shrink-0 rounded bg-white/80 px-1.5 py-0.5 text-[9px] font-semibold">{slot.status}</span>
+                                <span className="shrink-0 rounded bg-white/80 px-1 py-0.5 text-[9px] font-semibold">{slot.status}</span>
                               </span>
-                              <span className="mt-1 block truncate text-[10px] text-gray-700">{slot.trip?.route || getOperationLabel(slot.operationType)}</span>
-                              <span className="mt-0.5 block text-[9px] opacity-75">{formatTime(slot.startAt)}–{formatTime(slot.endAt)} · {slot.vehicle || 'Vehicle unassigned'}</span>
+                              <span className="block truncate text-[10px] text-gray-700">{slot.trip?.route || getOperationLabel(slot.operationType)}</span>
+                              <span className="block truncate text-[9px] opacity-75">{formatTime(slot.startAt)}–{formatTime(slot.endAt)}</span>
                             </button>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
 
                 {!filteredSlots.length && <div className="p-10 text-center text-sm text-gray-500">No reservations match this period and filter.</div>}
               </div>
@@ -377,7 +479,7 @@ const StoreSchedule = () => {
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Trip</p>
                     <h3 className="mt-1 text-lg font-bold text-[#173F35]">{selectedSlot.trip?.id || 'Reservation'}</h3>
                   </div>
-                  <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-700">{selectedSlot.status}</span>
+                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-700">Reservation: {selectedSlot.status}</span>
                 </div>
 
                 <div className="space-y-3 rounded-lg border border-gray-100 bg-gray-50/70 p-3.5 text-xs">
@@ -391,7 +493,16 @@ const StoreSchedule = () => {
                 <div className="rounded-lg border border-gray-100 p-3.5">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Planned Route</p>
                   <p className="mt-1.5 text-sm font-semibold text-gray-800">{selectedSlot.trip?.route || 'Route details are not available.'}</p>
-                  {selectedSlot.trip?.status && <p className="mt-1 text-[11px] text-gray-500">Trip status: {selectedSlot.trip.status}</p>}
+                  <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-600">
+                    <span>Trip status:</span>
+                    {selectedSlot.trip?.status ? (
+                      <span className={`rounded-full px-2 py-0.5 font-semibold ${getTripStatusTone(selectedSlot.trip.status)}`}>
+                        {selectedSlot.trip.status}
+                      </span>
+                    ) : (
+                      <span className="font-medium text-gray-400">Unavailable</span>
+                    )}
+                  </div>
                 </div>
 
                 {selectedSlot.notes && (

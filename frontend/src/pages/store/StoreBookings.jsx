@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Search, Download, Plus, Calendar, ChevronRight, Truck, 
   CheckCircle2, History, Edit2, ArrowLeft,
@@ -766,6 +767,8 @@ const CreateBookingView = ({ onBack, editData, storesList = [], itemsList = [], 
 // 2. MAIN BOOKINGS LIST COMPONENT (FE-4)
 // ==========================================
 const StoreBookings = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isCreating, setIsCreating] = useState(false);
   const [bookingToEdit, setBookingToEdit] = useState(null); 
   const [selectedBooking, setSelectedBooking] = useState(null);
@@ -921,6 +924,13 @@ const StoreBookings = () => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  useEffect(() => {
+    if (!location.state?.openCreateBooking) return;
+    setBookingToEdit(null);
+    setIsCreating(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   const filteredBookings = bookings.filter(booking => {
     const matchesSearch = 
