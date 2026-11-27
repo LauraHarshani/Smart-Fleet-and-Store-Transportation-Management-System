@@ -241,38 +241,50 @@ const toStoreNotifications = (bookings, readNotificationIds) =>
             },
           ];
 
-      return history.map((change, index) => {
-        const action =
-          change.action ||
-          change.toStatus?.toUpperCase().replace(/\s+/g, "_") ||
-          booking.status?.toUpperCase().replace(/\s+/g, "_");
+      const getAction = (change) =>
+        change.action ||
+        change.toStatus?.toUpperCase().replace(/\s+/g, "_") ||
+        booking.status?.toUpperCase().replace(/\s+/g, "_");
 
-        const copy =
-          notificationActionCopy[action] ||
-          notificationActionCopy[
-            change.toStatus?.toUpperCase().replace(/\s+/g, "_")
-          ];
+      const hasBeenSubmitted = history.some(
+        (change) => getAction(change) === "SUBMITTED"
+      );
 
-        const timestamp =
-          change.changedAt || booking.updatedAt || booking.createdAt;
+      return history
+        .map((change, index) => ({ change, index }))
+        .filter(
+          ({ change }) =>
+            !hasBeenSubmitted || getAction(change) !== "CREATED"
+        )
+        .map(({ change, index }) => {
+          const action = getAction(change);
 
-        const id = `${booking._id}-${
-          change._id || `${action || "update"}-${index}`
-        }`;
+          const copy =
+            notificationActionCopy[action] ||
+            notificationActionCopy[
+              change.toStatus?.toUpperCase().replace(/\s+/g, "_")
+            ];
 
-        return {
-          id,
-          action,
-          title: copy?.title || "Booking update",
-          message:
-            change.reason ||
-            copy?.message(bookingCode) ||
-            `Booking ${bookingCode} was updated.`,
-          time: formatNotificationTime(timestamp),
-          timestamp: timestamp ? new Date(timestamp).getTime() : 0,
-          read: readNotificationIds.has(id),
-        };
-      });
+          const timestamp =
+            change.changedAt || booking.updatedAt || booking.createdAt;
+
+          const id = `${booking._id}-${
+            change._id || `${action || "update"}-${index}`
+          }`;
+
+          return {
+            id,
+            action,
+            title: copy?.title || "Booking update",
+            message:
+              change.reason ||
+              copy?.message(bookingCode) ||
+              `Booking ${bookingCode} was updated.`,
+            time: formatNotificationTime(timestamp),
+            timestamp: timestamp ? new Date(timestamp).getTime() : 0,
+            read: readNotificationIds.has(id),
+          };
+        });
     })
     .sort((left, right) => right.timestamp - left.timestamp)
     .slice(0, 20);
@@ -324,10 +336,12 @@ const StoreLayout = () => {
   // Load notifications
   useEffect(() => {
     let active = true;
+    let loading = false;
 
-    const loadNotifications = async () => {
-      setNotificationsLoading(true);
-      setNotificationsError("");
+    const loadNotifications = async (initialLoad = false) => {
+      if (loading) return;
+      loading = true;
+      if (initialLoad) setNotificationsLoading(true);
 
       try {
         const { data } = await api.get("/store-bookings");
@@ -344,24 +358,41 @@ const StoreLayout = () => {
           setNotifications(
             toStoreNotifications(data.bookings, readNotificationIds)
           );
+          setNotificationsError("");
         }
       } catch (error) {
         if (active) {
-          setNotifications([]);
           setNotificationsError(
             error.response?.data?.message ||
               "Unable to load store notifications."
           );
         }
       } finally {
+        loading = false;
         if (active) setNotificationsLoading(false);
       }
     };
 
-    void loadNotifications();
+    void loadNotifications(true);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadNotifications();
+      }
+    }, 30_000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadNotifications();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [readNotificationStorageKey]);
 

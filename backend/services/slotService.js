@@ -159,7 +159,14 @@ const getSlots = async (filters = {}) => {
 
   return await StoreSlot.find(query)
     .populate("store", "name code docks")
-    .populate("trip", "id route status driver")
+    .populate({
+      path: "trip",
+      select: "id route status driver storeBookings",
+      populate: {
+        path: "storeBookings",
+        select: "items",
+      },
+    })
     .sort({ startAt: 1 });
 };
 

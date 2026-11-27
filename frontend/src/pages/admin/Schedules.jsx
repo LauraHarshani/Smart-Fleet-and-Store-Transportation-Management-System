@@ -42,6 +42,16 @@ const toTripView = (trip) => ({
 const toSlotView = (slot) => {
   const start = formatTime(slot.startAt);
   const end = formatTime(slot.endAt);
+  const totalQuantity = (slot.trip?.storeBookings || []).reduce(
+    (total, booking) =>
+      total +
+      (booking.items || []).reduce(
+        (bookingTotal, item) => bookingTotal + (Number(item.quantity) || 0),
+        0
+      ),
+    0
+  );
+
   return {
     ...slot,
     storeId: slot.store?._id || slot.store,
@@ -55,7 +65,7 @@ const toSlotView = (slot) => {
     booking: slot.trip?.id || "—",
     route: slot.trip?.route || "—",
     purpose: slot.operationType,
-    quantity: "—",
+    quantity: totalQuantity || "—",
     dock: slot.store?.docks ?? "—",
     dockNumber: slot.dockNumber ?? null,
   };
