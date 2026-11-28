@@ -345,7 +345,7 @@ const UpcomingTrips = ({ upcomingTrips, error }) => (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[430px]">
         <tbody>
-          {upcomingTrips.length ? upcomingTrips.map((trip) => (
+          {upcomingTrips.length ? upcomingTrips.slice(0, 5).map((trip) => (
             <tr
               key={trip.id}
               className="border-t border-[#E2E8E0] hover:bg-[#FAFCFA]"
