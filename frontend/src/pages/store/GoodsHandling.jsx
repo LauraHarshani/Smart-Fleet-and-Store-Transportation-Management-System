@@ -23,6 +23,7 @@ const sendingStatuses = [
 ];
 
 const receivingStatuses = [
+  "Awaiting Dispatch",
   "Awaiting Receipt",
   "Received",
   "Completed",
@@ -34,6 +35,7 @@ const statusStyles = {
   "Awaiting Handover": "bg-[#FFE8D5] text-[#A4490B]",
   "In Transit": "bg-[#CFFAFE] text-[#0E7490]",
   "Handed Over": "bg-[#DBEAFE] text-[#1D4ED8]",
+  "Awaiting Dispatch": "bg-[#FFF4D6] text-[#925C00]",
   "Awaiting Receipt": "bg-[#FCE7F3] text-[#BE185D]",
   Received: "bg-[#DCFCE7] text-[#15803D]",
   Completed: "bg-[#DCFCE7] text-[#15803D]",
@@ -84,7 +86,7 @@ const GoodsHandling = () => {
                 ? (dropStop?.status === "Completed" ? "Handed Over" : dropStop?.status === "Arrived" ? "Awaiting Handover" : hasHandover ? "In Transit" : "Prepared")
                 : (hasReceived ? "Received" : "Awaiting Receipt"))
               : record.status === "Approved"
-                ? (direction === "sending" ? "Awaiting Preparation" : "Awaiting Receipt")
+                ? (direction === "sending" ? "Awaiting Preparation" : "Awaiting Dispatch")
                 : record.status === "Rejected" || record.status === "Cancelled" ? record.status
                   : direction === "sending" ? "Awaiting Preparation" : "Awaiting Receipt";
           const date = record.requestedPickupDate ? new Date(record.requestedPickupDate) : null;

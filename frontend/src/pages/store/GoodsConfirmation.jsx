@@ -71,6 +71,7 @@ const GoodsConfirmation = () => {
           origin, destination,
           route: `${origin} → ${destination}`,
           status: record.status,
+          vehicle: record.assignedVehicle?.registrationNumber || record.assignedVehicle?.id || record.assignedTrip?.vehicle || "",
           scheduledPickup: record.requestedPickupDate,
           pickupTime: record.requestedTimeWindow?.startTime || "",
           itemDetails: (record.items || []).map((line) => ({
